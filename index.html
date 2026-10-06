@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>台北機場專車 - 全功能智慧調度與接單系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .chat-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-scroll::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    .chat-scroll::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 4px;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans">
+
+  <!-- 頂部統一大導航列 -->
+  <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-40 shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- 系統 Logo 與服務範疇 -->
+      <div class="flex items-center space-x-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-md">
+          <i class="fa-solid fa-plane-departure text-lg"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-base sm:text-lg font-bold tracking-tight text-white">台北機場專車・三合一調度平台</h1>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
+              24H 智慧監聽中
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400">專營專線：<span class="text-sky-300 font-medium">桃園國際機場 (TPE) & 台北松山機場 (TSA) 專屬送機</span></p>
+        </div>
+      </div>
+
+      <!-- 主分頁切換列 (調度中心 / 司機接單 / 顧客線上直約 / LINE模擬器 / 串接指南) -->
+      <nav class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs font-medium space-x-1 shadow-inner overflow-x-auto">
+        <button onclick="switchTab('dispatch')" id="nav-dispatch" class="tab-btn px-3 py-2 rounded-lg transition flex items-center space-x-1.5 bg-sky-600 text-white font-semibold shadow flex-shrink-0">
+          <i class="fa-solid fa-table-columns"></i>
+          <span>調度中心</span>
+        </button>
+        <button onclick="switchTab('driver')" id="nav-driver" class="tab-btn px-3 py-2 rounded-lg transition text-slate-400 hover:text-white flex items-center space-x-1.5 flex-shrink-0">
+          <i class="fa-solid fa-car-side text-emerald-400"></i>
+          <span>司機接單</span>
+          <span id="navDriverBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500 text-slate-950 font-bold">0</span>
+        </button>
+        <button onclick="switchTab('book')" id="nav-book" class="tab-btn px-3 py-2 rounded-lg transition text-amber-300 hover:text-white flex items-center space-x-1.5 border border-amber-500/30 bg-amber-950/20 hover:bg-amber-900/40 flex-shrink-0">
+          <i class="fa-solid fa-earth-americas text-amber-400"></i>
+          <span class="font-bold">顧客線上預約</span>
+          <span class="px-1.5 py-0.2 rounded text-[9px] bg-amber-500 text-slate-950 font-black">FB/直客</span>
+        </button>
+        <button onclick="switchTab('simulator')" id="nav-simulator" class="tab-btn px-3 py-2 rounded-lg transition text-slate-400 hover:text-white flex items-center space-x-1.5 flex-shrink-0">
+          <i class="fa-brands fa-line text-emerald-400 text-sm"></i>
+          <span>LINE 群模擬</span>
+        </button>
+        <button onclick="switchTab('guide')" id="nav-guide" class="tab-btn px-3 py-2 rounded-lg transition text-slate-400 hover:text-white flex items-center space-x-1.5 flex-shrink-0">
+          <i class="fa-solid fa-tower-broadcast text-sky-400"></i>
+          <span>真機串接與隧道</span>
+        </button>
+      </nav>
+
+      <!-- 快速重新整理按鈕 -->
+      <div class="hidden sm:flex items-center">
+        <button onclick="loadAllData()" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="立即同步資料">
+          <i class="fa-solid fa-rotate"></i>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- 主內容區域 -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
+
+    <!-- ==================== 分頁 1: 調度控制中心 ==================== -->
+    <section id="tab-dispatch" class="tab-content active space-y-6">
+
+      <!-- KPI 數據卡片 -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow">
+          <p class="text-xs font-medium text-slate-400">群組叫車總數</p>
+          <p id="statTotal" class="text-2xl font-bold text-white mt-1">0</p>
+          <span class="text-[10px] text-slate-500">所有 LINE 群組累計</span>
+        </div>
+        <div class="bg-amber-950/40 border border-amber-500/30 rounded-xl p-3.5 shadow">
+          <p class="text-xs font-medium text-amber-400">待派車 (待接單)</p>
+          <p id="statNew" class="text-2xl font-bold text-amber-300 mt-1">0</p>
+          <span class="text-[10px] text-amber-400/70">等待司機接單</span>
+        </div>
+        <div class="bg-sky-950/40 border border-sky-500/30 rounded-xl p-3.5 shadow">
+          <p class="text-xs font-medium text-sky-400">執行中行程</p>
+          <p id="statActive" class="text-2xl font-bold text-sky-300 mt-1">0</p>
+          <span class="text-[10px] text-sky-400/70">前往接送 / 乘車中</span>
+        </div>
+        <div class="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-3.5 shadow">
+          <p class="text-xs font-medium text-emerald-400">已抵達機場完成</p>
+          <p id="statCompleted" class="text-2xl font-bold text-emerald-300 mt-1">0</p>
+          <span class="text-[10px] text-emerald-400/70">已順利送達航廈</span>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow">
+          <p class="text-xs font-medium text-indigo-400">連線 LINE 群組</p>
+          <p id="statGroups" class="text-2xl font-bold text-indigo-300 mt-1">0</p>
+          <span class="text-[10px] text-indigo-400/70">已自動註冊群組</span>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow">
+          <p class="text-xs font-medium text-teal-400">車隊待命司機</p>
+          <p id="statDrivers" class="text-2xl font-bold text-teal-300 mt-1">0</p>
+          <span class="text-[10px] text-teal-400/70">台北地區線上駕駛</span>
+        </div>
+      </div>
+
+      <!-- 雙欄佈局：左側送機排程佇列，右側群組與司機 -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- 左側 2 欄：預約送機行程列表 -->
+        <div class="lg:col-span-2 space-y-4">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+            
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-3">
+              <div>
+                <h2 class="text-base font-bold text-white flex items-center space-x-2">
+                  <i class="fa-solid fa-list-check text-sky-400"></i>
+                  <span>機場專車預約佇列 (即時自動辨識)</span>
+                </h2>
+                <p class="text-xs text-slate-400">來自各飯店禮賓部、豪宅住戶與旅行社 LINE 叫車群組</p>
+              </div>
+
+              <!-- 狀態篩選 -->
+              <div class="flex bg-slate-950 p-1 rounded-xl text-xs space-x-1 border border-slate-800">
+                <button onclick="setFilter('')" class="filter-tab px-3 py-1.5 rounded-lg font-medium transition bg-sky-600 text-white" data-status="">全部</button>
+                <button onclick="setFilter('NEW')" class="filter-tab px-3 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white" data-status="NEW">待派車</button>
+                <button onclick="setFilter('ASSIGNED')" class="filter-tab px-3 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white" data-status="ASSIGNED">已派車</button>
+                <button onclick="setFilter('COMPLETED')" class="filter-tab px-3 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white" data-status="COMPLETED">已送達</button>
+              </div>
+            </div>
+
+            <!-- 行程卡片清單 -->
+            <div id="tripsList" class="divide-y divide-slate-800/80 mt-2 space-y-3">
+              <div class="py-12 text-center text-slate-500">
+                <i class="fa-solid fa-spinner fa-spin text-2xl mb-2 text-sky-400"></i>
+                <p class="text-sm">正在載入行程資料...</p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 右側 1 欄：監聽群組與車隊司機名單 -->
+        <div class="space-y-6">
+
+          <!-- LINE 叫車群組監控卡片 -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div class="flex items-center space-x-2">
+                <i class="fa-brands fa-line text-emerald-400 text-lg"></i>
+                <h3 class="text-sm font-bold text-white">已監聽之 LINE 叫車群組</h3>
+              </div>
+              <span class="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono" id="groupCountBadge">0</span>
+            </div>
+            <p class="text-xs text-slate-400 mt-2">機器人已加入以下群組，收到任何送機需求將自動解析：</p>
+            
+            <div id="groupsList" class="mt-3 space-y-2 max-h-64 overflow-y-auto pr-1">
+              <!-- JS 動態填入 -->
+            </div>
+          </div>
+
+          <!-- 車隊司機名冊 -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-id-card text-sky-400 text-base"></i>
+                <h3 class="text-sm font-bold text-white">車隊待命司機</h3>
+              </div>
+              <button onclick="openAddDriverModal()" class="text-xs text-sky-400 hover:text-sky-300 font-medium">
+                + 新增司機
+              </button>
+            </div>
+
+            <div id="driversList" class="mt-3 space-y-2 max-h-64 overflow-y-auto pr-1">
+              <!-- JS 動態填入 -->
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== 分頁 2: 司機手機接單平台 ==================== -->
+    <section id="tab-driver" class="tab-content space-y-5">
+      <div class="max-w-xl mx-auto space-y-5">
+        
+        <!-- 司機身分模擬列 -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-lg">
+              <i class="fa-solid fa-car"></i>
+            </div>
+            <div>
+              <h2 class="text-sm font-bold text-white">司機接單駕駛台</h2>
+              <p class="text-[11px] text-emerald-400 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 線上待命・支援一鍵搶單
+              </p>
+            </div>
+          </div>
+
+          <div class="text-right">
+            <label class="block text-[10px] text-slate-400 mb-0.5">切換目前駕駛：</label>
+            <select id="driverSelect" onchange="onDriverChanged()" class="bg-slate-950 border border-slate-700 text-xs rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-sky-500 font-medium">
+              <!-- JS 動態填入 -->
+            </select>
+          </div>
+        </div>
+
+        <!-- 司機核心福利優勢看板 (極具吸引力) -->
+        <div class="bg-gradient-to-r from-emerald-950/60 via-slate-900 to-sky-950/60 border border-emerald-500/30 rounded-2xl p-3.5 shadow-lg">
+          <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+            <span class="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-shield-halved text-amber-400"></i>
+              <span>專車司機專屬禮遇・實收最高</span>
+            </span>
+            <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-bold border border-amber-500/30">
+              免收 25% 暴利抽成
+            </span>
+          </div>
+          <div class="grid grid-cols-3 gap-2 text-center text-xs">
+            <div class="bg-slate-950/70 p-2 rounded-xl border border-slate-800">
+              <p class="text-[10px] text-slate-400">每趟系統費僅</p>
+              <p class="text-base font-extrabold text-emerald-400">NT$ 50</p>
+              <p class="text-[9px] text-slate-500">透明平價・無隱藏費</p>
+            </div>
+            <div class="bg-slate-950/70 p-2 rounded-xl border border-slate-800">
+              <p class="text-[10px] text-slate-400">回程不空車</p>
+              <p class="text-base font-extrabold text-sky-400">雙倍入帳</p>
+              <p class="text-[9px] text-slate-500">去送機 + 回接機</p>
+            </div>
+            <div class="bg-slate-950/70 p-2 rounded-xl border border-slate-800">
+              <p class="text-[10px] text-slate-400">明日預約班表</p>
+              <p class="text-base font-extrabold text-amber-400">前晚預約</p>
+              <p class="text-[9px] text-slate-500">睡醒直接出車</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 本人進行中之行程 (若有) -->
+        <div id="myActiveTripSection" class="hidden">
+          <div class="bg-gradient-to-br from-emerald-950/80 to-slate-900 border-2 border-emerald-500/50 rounded-2xl p-4 shadow-xl space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                ★ 您目前承接的專車行程
+              </span>
+              <span id="activeTripId" class="text-xs font-mono font-bold text-emerald-400"></span>
+            </div>
+
+            <div class="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
+              <div>
+                <p class="text-[11px] text-slate-400">上車地點：</p>
+                <p id="activePickup" class="text-sm font-bold text-white"></p>
+                <p id="activeTime" class="text-[11px] text-amber-400 font-mono mt-0.5"></p>
+              </div>
+              <div class="pt-2 border-t border-slate-800 flex justify-between items-center">
+                <div>
+                  <p class="text-[11px] text-slate-400">目的地機場：</p>
+                  <p id="activeAirport" class="text-xs font-bold text-sky-400"></p>
+                </div>
+                <div class="text-right">
+                  <p class="text-[11px] text-slate-400">趟次車資 (實收)：</p>
+                  <p id="activeFare" class="text-sm font-bold text-emerald-400"></p>
+                </div>
+              </div>
+              <div id="activeMatchedNotice" class="hidden pt-2 border-t border-slate-800 text-[11px] text-sky-300 flex items-center gap-1.5">
+                <i class="fa-solid fa-link text-sky-400"></i>
+                <span id="activeMatchedText">已綁定回程接機單</span>
+              </div>
+            </div>
+
+            <!-- 聯絡乘客 -->
+            <div class="flex items-center justify-between pt-1">
+              <div>
+                <p id="activeCustomerName" class="text-xs font-semibold text-slate-200"></p>
+                <p id="activePaxBags" class="text-[10px] text-slate-400"></p>
+              </div>
+              <a id="activeCallBtn" href="#" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-bold text-white flex items-center space-x-1.5 shadow">
+                <i class="fa-solid fa-phone"></i>
+                <span>撥打電話給乘客</span>
+              </a>
+            </div>
+
+            <!-- 狀態推進按鈕 -->
+            <div id="tripActionBtns" class="grid grid-cols-2 gap-2 pt-2">
+              <!-- JS 動態填入 -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 司機端接單分類選單 -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+              <i class="fa-solid fa-bell text-amber-400"></i>
+              <span>等待司機接單之行程</span>
+            </h3>
+            <span id="jobCountBadge" class="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">0</span>
+          </div>
+
+          <!-- 子分頁：全部 / 回程不空車 / 明日早鳥預約 -->
+          <div class="flex bg-slate-950 p-1 rounded-xl text-xs space-x-1 border border-slate-800">
+            <button onclick="setDriverFilter('ALL')" id="driver-tab-all" class="flex-1 py-1.5 rounded-lg font-medium transition bg-sky-600 text-white">
+              全部待接單
+            </button>
+            <button onclick="setDriverFilter('RETURN_BUNDLE')" id="driver-tab-bundle" class="flex-1 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white flex items-center justify-center gap-1">
+              <i class="fa-solid fa-repeat text-sky-400"></i>
+              <span>回程不空車</span>
+            </button>
+            <button onclick="setDriverFilter('TOMORROW')" id="driver-tab-tomorrow" class="flex-1 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white flex items-center justify-center gap-1">
+              <i class="fa-regular fa-calendar-check text-amber-400"></i>
+              <span>明日預約班表</span>
+            </button>
+          </div>
+
+          <p class="text-xs text-slate-400" id="driverFilterDesc">群組一發送叫車需求立即同步跳出，點擊按鈕一鍵搶單：</p>
+
+          <div id="availableJobsList" class="space-y-3">
+            <!-- JS 動態填入 -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== 分頁: 顧客線上極速預約 (FB/IG/社群直客專區) ==================== -->
+    <section id="tab-book" class="tab-content space-y-6">
+      <div class="max-w-2xl mx-auto space-y-6">
+        
+        <!-- 頂部品牌與服務承諾橫幅 -->
+        <div class="bg-gradient-to-r from-sky-950/80 via-slate-900 to-indigo-950/80 border border-sky-500/30 rounded-2xl p-5 shadow-xl space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1.5">
+              <i class="fa-solid fa-plane-departure text-amber-400"></i>
+              <span>台北機場專車・24H 顧客線上極速預約</span>
+            </span>
+            <span class="text-xs text-slate-400">免加 LINE 即可下單</span>
+          </div>
+
+          <h2 class="text-lg font-bold text-white tracking-wide">
+            大台北地區往返 <span class="text-sky-400">桃園機場 (TPE)</span> & <span class="text-sky-400">松山機場 (TSA)</span>
+          </h2>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            嚴選五星評價車隊・全天候清晨/深夜準時出車・透明一口價絕無跳表加成。
+          </p>
+
+          <!-- 3 大安心保障標籤 -->
+          <div class="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
+            <div class="bg-slate-950/60 p-2 rounded-xl border border-slate-800">
+              <i class="fa-solid fa-tags text-emerald-400 mb-1"></i>
+              <p class="text-[11px] font-bold text-white">透明一口價</p>
+              <p class="text-[9px] text-slate-400">含過路費無隱藏</p>
+            </div>
+            <div class="bg-slate-950/60 p-2 rounded-xl border border-slate-800">
+              <i class="fa-solid fa-plane-circle-check text-sky-400 mb-1"></i>
+              <p class="text-[11px] font-bold text-white">航班延誤免費等</p>
+              <p class="text-[9px] text-slate-400">即時監控起降</p>
+            </div>
+            <div class="bg-slate-950/60 p-2 rounded-xl border border-slate-800">
+              <i class="fa-solid fa-phone-volume text-amber-400 mb-1"></i>
+              <p class="text-[11px] font-bold text-white">出發前電話聯繫</p>
+              <p class="text-[9px] text-slate-400">司機提前主動確認</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 社群推廣與直客連結分享盒 (方便用戶貼在 FB / IG / 蝦皮) -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-2 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-slate-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-share-nodes text-sky-400"></i>
+              <span>社群專用「直客極速預約網址」（可貼在 FB、IG、蝦皮、Threads）：</span>
+            </span>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <input type="text" id="publicBookingLinkInput" readonly value="http://127.0.0.1:8000/book" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-sky-300 select-all">
+            <button type="button" onclick="copyBookingLink()" class="px-3 py-2 bg-sky-600 hover:bg-sky-500 rounded-xl text-xs font-bold text-white transition flex items-center gap-1">
+              <i class="fa-regular fa-copy"></i>
+              <span>複製</span>
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400">💡 提示：開啟下方「真機串接與隧道」後，此處將自動替換為全球皆可開啟的公開 HTTPS 網址！</p>
+        </div>
+
+        <!-- 顧客線上預約表單 -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+          <div class="border-b border-slate-800 pb-3 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-clipboard-list text-emerald-400"></i>
+              <span>填寫專車預約資料</span>
+            </h3>
+            <span class="text-[11px] text-slate-400">送出後立即由後台車隊排班</span>
+          </div>
+
+          <form id="customerBookingForm" onsubmit="submitCustomerBooking(event)" class="space-y-4 text-xs">
+            
+            <!-- 1. 行程類型切換 (送機 vs 接機) -->
+            <div>
+              <label class="block text-slate-300 font-semibold mb-1.5">1. 選擇專車服務類型：</label>
+              <div class="grid grid-cols-2 gap-2">
+                <button type="button" onclick="setBookTripType('DEPARTURE')" id="bookTypeDepBtn" class="py-2.5 px-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 bg-sky-600 text-white border border-sky-500">
+                  <i class="fa-solid fa-plane-departure"></i>
+                  <span>台北送機 (前往機場)</span>
+                </button>
+                <button type="button" onclick="setBookTripType('ARRIVAL')" id="bookTypeArrBtn" class="py-2.5 px-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 bg-slate-950 text-slate-400 border border-slate-800 hover:text-white">
+                  <i class="fa-solid fa-plane-arrival"></i>
+                  <span>返台接機 (機場返北)</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 2. 機場與航廈選擇 -->
+            <div>
+              <label class="block text-slate-300 font-semibold mb-1.5" id="bookAirportLabel">2. 前往目的地機場：</label>
+              <select id="bookAirport" onchange="onBookAirportOrVehicleChanged()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-sky-500 font-medium">
+                <option value="桃園國際機場 (TPE) 第二航廈">桃園國際機場 (TPE) 第二航廈</option>
+                <option value="桃園國際機場 (TPE) 第一航廈">桃園國際機場 (TPE) 第一航廈</option>
+                <option value="台北松山機場 (TSA) 國際線">台北松山機場 (TSA) 國際線</option>
+                <option value="台北松山機場 (TSA) 國內線">台北松山機場 (TSA) 國內線</option>
+              </select>
+            </div>
+
+            <!-- 3. 上車 / 送達地址 -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="text-slate-300 font-semibold" id="bookLocationLabel">3. 台北市區接送地址：</label>
+                <span class="text-[10px] text-slate-400">大台北各大飯店/社區門口皆可接送</span>
+              </div>
+              <input type="text" id="bookLocation" required placeholder="例如：台北晶華酒店大門口、信義路五段100號" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-sky-500">
+              
+              <!-- 快捷地點標籤 -->
+              <div class="flex flex-wrap gap-1.5 mt-2">
+                <button type="button" onclick="fillBookLocation('台北晶華酒店大門口')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">晶華酒店</button>
+                <button type="button" onclick="fillBookLocation('君悅酒店正門 Lobby')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">君悅酒店</button>
+                <button type="button" onclick="fillBookLocation('台北萬豪酒店門口')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">萬豪酒店</button>
+                <button type="button" onclick="fillBookLocation('台北車站東三門')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">台北車站</button>
+                <button type="button" onclick="fillBookLocation('信義區象山社區')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">信義區豪宅</button>
+                <button type="button" onclick="fillBookLocation('板橋新板特區')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">板橋特區</button>
+              </div>
+            </div>
+
+            <!-- 4. 用車日期與時間 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-slate-300 font-semibold mb-1.5">4. 出發乘車日期：</label>
+                <input type="date" id="bookDate" required class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500">
+              </div>
+              <div>
+                <label class="block text-slate-300 font-semibold mb-1.5">出發時間 (24H制)：</label>
+                <input type="time" id="bookTime" required value="06:30" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500">
+              </div>
+            </div>
+
+            <!-- 5. 搭乘人數與行李尺寸規格 (精準防呆後車廂容積) -->
+            <div class="space-y-3 bg-slate-950/60 p-4 rounded-2xl border border-slate-800">
+              
+              <!-- 搭乘人數 -->
+              <div>
+                <label class="block text-slate-300 font-semibold mb-1 flex items-center justify-between">
+                  <span>👥 搭乘乘客人數：</span>
+                  <span class="text-[10px] text-slate-400">超過 4 人請選擇九人座</span>
+                </label>
+                <select id="bookPax" onchange="onLuggageOrPaxChanged()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 font-medium">
+                  <option value="1">1 位乘客</option>
+                  <option value="2">2 位乘客</option>
+                  <option value="3">3 位乘客</option>
+                  <option value="4" selected>4 位乘客 (轎車滿載)</option>
+                  <option value="5">5 位乘客 (需九人座)</option>
+                  <option value="6">6 位乘客 (需九人座)</option>
+                  <option value="7">7 位乘客 (九人座)</option>
+                  <option value="8">8 位乘客 (九人座)</option>
+                </select>
+              </div>
+
+              <!-- 行李箱尺寸分類 (28~32吋大箱 vs 20~24吋登機箱) -->
+              <div>
+                <label class="block text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
+                  <span>🧳 行李箱尺寸與件數（防呆關鍵：避免車廂放不下）：</span>
+                  <button type="button" onclick="toggleLuggageGuideModal()" class="text-[10px] text-sky-400 hover:underline flex items-center gap-1">
+                    <i class="fa-solid fa-circle-question"></i> 後車廂容積對照
+                  </button>
+                </label>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <!-- 28~32 吋大行李箱 -->
+                  <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
+                    <div>
+                      <p class="text-xs font-bold text-white flex items-center gap-1.5">
+                        <i class="fa-solid fa-suitcase-rolling text-sky-400"></i>
+                        <span>28~32 吋托運大箱</span>
+                      </p>
+                      <p class="text-[10px] text-slate-400 mt-0.5">長寬高總和>158cm / 國際大箱</p>
+                    </div>
+                    
+                    <div class="flex items-center space-x-2 bg-slate-950 px-2 py-1 rounded-lg border border-slate-700">
+                      <button type="button" onclick="adjustLuggageCount('large', -1)" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition">-</button>
+                      <span id="largeLuggageCount" class="w-5 text-center text-xs font-mono font-bold text-sky-400">2</span>
+                      <button type="button" onclick="adjustLuggageCount('large', 1)" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition">+</button>
+                    </div>
+                    <input type="hidden" id="bookLuggageLarge" value="2">
+                  </div>
+
+                  <!-- 20~24 吋登機/中型箱 -->
+                  <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
+                    <div>
+                      <p class="text-xs font-bold text-white flex items-center gap-1.5">
+                        <i class="fa-solid fa-suitcase text-emerald-400"></i>
+                        <span>20~24 吋登機/中箱</span>
+                      </p>
+                      <p class="text-[10px] text-slate-400 mt-0.5">隨身登機箱或國內輕巧箱</p>
+                    </div>
+                    
+                    <div class="flex items-center space-x-2 bg-slate-950 px-2 py-1 rounded-lg border border-slate-700">
+                      <button type="button" onclick="adjustLuggageCount('small', -1)" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition">-</button>
+                      <span id="smallLuggageCount" class="w-5 text-center text-xs font-mono font-bold text-emerald-400">1</span>
+                      <button type="button" onclick="adjustLuggageCount('small', 1)" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition">+</button>
+                    </div>
+                    <input type="hidden" id="bookLuggageSmall" value="1">
+                  </div>
+                </div>
+              </div>
+
+              <!-- 特殊大件行李 (Checkboxes) -->
+              <div>
+                <label class="block text-slate-300 font-semibold mb-1 text-[11px]">
+                  📦 特殊大件行李（若有請勾選，系統自動評估車廂）：
+                </label>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-slate-300 text-[11px]">
+                  <label class="flex items-center space-x-1.5 p-2 rounded-lg bg-slate-900/80 border border-slate-800 hover:border-slate-700 cursor-pointer">
+                    <input type="checkbox" name="specialLuggage" value="高爾夫球具" onchange="onLuggageOrPaxChanged()" class="rounded bg-slate-950 border-slate-700 text-sky-600 focus:ring-0">
+                    <span>⛳ 高爾夫球具</span>
+                  </label>
+                  <label class="flex items-center space-x-1.5 p-2 rounded-lg bg-slate-900/80 border border-slate-800 hover:border-slate-700 cursor-pointer">
+                    <input type="checkbox" name="specialLuggage" value="嬰兒推車" onchange="onLuggageOrPaxChanged()" class="rounded bg-slate-950 border-slate-700 text-sky-600 focus:ring-0">
+                    <span>👶 嬰兒推車 (折疊)</span>
+                  </label>
+                  <label class="flex items-center space-x-1.5 p-2 rounded-lg bg-slate-900/80 border border-slate-800 hover:border-slate-700 cursor-pointer">
+                    <input type="checkbox" name="specialLuggage" value="摺疊輪椅" onchange="onLuggageOrPaxChanged()" class="rounded bg-slate-950 border-slate-700 text-sky-600 focus:ring-0">
+                    <span>♿ 摺疊輪椅 (輔具)</span>
+                  </label>
+                  <label class="flex items-center space-x-1.5 p-2 rounded-lg bg-slate-900/80 border border-slate-800 hover:border-slate-700 cursor-pointer">
+                    <input type="checkbox" name="specialLuggage" value="大型紙箱" onchange="onLuggageOrPaxChanged()" class="rounded bg-slate-950 border-slate-700 text-sky-600 focus:ring-0">
+                    <span>📦 大型出國紙箱</span>
+                  </label>
+                  <label class="flex items-center space-x-1.5 p-2 rounded-lg bg-slate-900/80 border border-slate-800 hover:border-slate-700 cursor-pointer">
+                    <input type="checkbox" name="specialLuggage" value="雪板/衝浪板" onchange="onLuggageOrPaxChanged()" class="rounded bg-slate-950 border-slate-700 text-sky-600 focus:ring-0">
+                    <span>🏂 雪板 / 衝浪板</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- 動態後車廂容量安全診斷條 -->
+              <div id="trunkFitAlert" class="p-2.5 rounded-xl text-xs flex items-center justify-between border bg-sky-950/40 border-sky-500/30 text-sky-200">
+                <div class="flex items-center gap-2">
+                  <i class="fa-solid fa-circle-check text-sky-400 text-sm flex-shrink-0" id="trunkFitIcon"></i>
+                  <span id="trunkFitText">後車廂容量評估：空間充裕，車隊可順利裝載出發。</span>
+                </div>
+                <span id="trunkUnitsBadge" class="text-[10px] font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-700 text-slate-300">容量指數: 2.5</span>
+              </div>
+
+              <!-- 隱藏的通用行李總數 (維持向後相容) -->
+              <input type="hidden" id="bookLuggage" value="3">
+            </div>
+
+            <!-- 6. 車型等級選擇 (附帶即時車資計算) -->
+            <div>
+              <label class="block text-slate-300 font-semibold mb-1.5">5. 選擇車款與價格 (一口價保證)：</label>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2" id="vehicleSelectionGrid">
+                
+                <label class="cursor-pointer">
+                  <input type="radio" name="bookVehicle" value="標準轎車 (4人座)" onchange="onBookAirportOrVehicleChanged()" class="peer sr-only">
+                  <div class="p-3 rounded-xl border border-slate-800 bg-slate-950 peer-checked:border-sky-500 peer-checked:bg-sky-950/30 transition text-center space-y-1">
+                    <i class="fa-solid fa-car text-slate-400 peer-checked:text-sky-400 text-lg"></i>
+                    <p class="font-bold text-white text-xs">標準轎車</p>
+                    <p class="text-[10px] text-slate-400">Camry / Altis (4座)</p>
+                    <p class="text-sm font-bold text-emerald-400 font-mono" id="fareDisplaySedan">NT$ 1,100</p>
+                  </div>
+                </label>
+
+                <label class="cursor-pointer">
+                  <input type="radio" name="bookVehicle" value="休旅車 SUV (4-6人座)" onchange="onBookAirportOrVehicleChanged()" class="peer sr-only">
+                  <div class="p-3 rounded-xl border border-slate-800 bg-slate-950 peer-checked:border-sky-500 peer-checked:bg-sky-950/30 transition text-center space-y-1">
+                    <i class="fa-solid fa-truck-monster text-slate-400 peer-checked:text-sky-400 text-lg"></i>
+                    <p class="font-bold text-white text-xs">休旅車 SUV</p>
+                    <p class="text-[10px] text-slate-400">RAV4 / CRV (大空間)</p>
+                    <p class="text-sm font-bold text-emerald-400 font-mono" id="fareDisplaySuv">NT$ 1,400</p>
+                  </div>
+                </label>
+
+                <label class="cursor-pointer">
+                  <input type="radio" name="bookVehicle" value="商務九人座 (T6/Alphard)" checked onchange="onBookAirportOrVehicleChanged()" class="peer sr-only">
+                  <div class="p-3 rounded-xl border border-sky-500 bg-sky-950/30 peer-checked:border-sky-500 peer-checked:bg-sky-950/30 transition text-center space-y-1">
+                    <i class="fa-solid fa-van-shuttle text-sky-400 text-lg"></i>
+                    <p class="font-bold text-white text-xs">商務九人座</p>
+                    <p class="text-[10px] text-slate-400">Alphard / 福斯 T6</p>
+                    <p class="text-sm font-bold text-emerald-400 font-mono" id="fareDisplayVan">NT$ 1,800</p>
+                  </div>
+                </label>
+
+              </div>
+            </div>
+
+            <!-- 7. 航班與聯絡人資訊 -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-slate-300 font-semibold mb-1.5">航班編號 (選填)：</label>
+                <input type="text" id="bookFlight" placeholder="如：BR87、CI51" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 font-mono">
+              </div>
+              <div>
+                <label class="block text-slate-300 font-semibold mb-1.5">乘車人稱呼 / 姓名：</label>
+                <input type="text" id="bookName" required placeholder="例如：林先生 / 陳小姐" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500">
+              </div>
+              <div>
+                <label class="block text-slate-300 font-semibold mb-1.5">聯絡手機：</label>
+                <input type="tel" id="bookPhone" required placeholder="0912-345-678" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 font-mono">
+              </div>
+            </div>
+
+            <!-- 8. 特殊備註 -->
+            <div>
+              <label class="block text-slate-300 font-semibold mb-1">特殊需求備註 (選填)：</label>
+              <input type="text" id="bookNotes" placeholder="例如：需 1 張安全座椅、行李箱較大、舉牌接機等" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500">
+            </div>
+
+            <!-- 費用總計與提交 -->
+            <div class="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div>
+                <p class="text-[11px] text-slate-400">專車一口價 (含司機出車、過路費、乘客險)：</p>
+                <p class="text-xl font-extrabold text-emerald-400 font-mono" id="bookTotalFare">NT$ 1,800</p>
+              </div>
+
+              <button type="submit" id="bookSubmitBtn" class="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-emerald-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 active:scale-95 rounded-xl text-sm font-bold text-white shadow-xl transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-paper-plane"></i>
+                <span>立即確認送出專車預約</span>
+              </button>
+            </div>
+
+          </form>
+
+          <!-- 預約成功憑證卡片 (成功後呈現在下方) -->
+          <div id="bookingSuccessBox" class="hidden bg-gradient-to-b from-emerald-950/80 to-slate-950 border-2 border-emerald-500/60 rounded-2xl p-5 shadow-2xl space-y-3.5">
+            <div class="flex items-center justify-between">
+              <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+                <i class="fa-solid fa-circle-check text-emerald-400"></i>
+                <span>專車預約成功・調度中心指派中</span>
+              </span>
+              <span id="successTripId" class="text-xs font-mono font-bold text-sky-400">#訂單確認</span>
+            </div>
+
+            <div class="bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-xs space-y-1.5">
+              <p class="text-slate-300">乘車日期時間：<span id="successDateTime" class="font-bold text-amber-400 font-mono"></span></p>
+              <p class="text-slate-300">路線規劃：<span id="successRoute" class="font-semibold text-white"></span></p>
+              <p class="text-slate-300">預定車種：<span id="successVehicle" class="text-sky-300"></span></p>
+              <p class="text-slate-300">專車車資：<span id="successFare" class="font-bold text-emerald-400 font-mono text-sm"></span> (現場現金或轉帳)</p>
+            </div>
+
+            <p class="text-[11px] text-slate-400">
+              司機將於用車前 15~30 分鐘主動以電話或簡訊聯繫。該行程已同步廣播至車隊搶單大群！
+            </p>
+
+            <div class="flex space-x-2 pt-1">
+              <button type="button" onclick="switchTab('dispatch')" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-semibold text-slate-300">
+                前往調度中心查看此單
+              </button>
+              <button type="button" onclick="resetBookingForm()" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-semibold text-white">
+                再預約一趟
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== 分頁 3: LINE 多群組模擬器 ==================== -->
+    <section id="tab-simulator" class="tab-content">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- 左側：群組切換與一鍵情境 (1 col) -->
+        <div class="space-y-4">
+          
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+            <label class="block text-xs font-bold text-slate-300">
+              <i class="fa-solid fa-users-viewfinder text-sky-400 mr-1"></i> 切換模擬 LINE 群組：
+            </label>
+            <select id="simGroupSelect" onchange="onGroupChanged()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500">
+              <!-- JS 填充 -->
+            </select>
+
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">模擬發話者稱呼：</label>
+              <input type="text" id="simSenderName" value="晶華酒店禮賓部" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+            </div>
+          </div>
+
+          <!-- 一鍵測試情境 -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-2.5">
+            <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
+              <i class="fa-solid fa-bolt text-amber-400"></i>
+              <span>一鍵快速測試情境 (繁體中文)</span>
+            </h3>
+            <p class="text-[11px] text-slate-400">點擊以下按鈕自動帶入台北真實送機訊息：</p>
+
+            <button onclick="fillScenario('taoyuan')" class="w-full text-left p-2.5 rounded-xl bg-slate-950/60 hover:bg-slate-950 border border-slate-800 text-xs transition">
+              <p class="font-semibold text-sky-300">✈️ 預約送機：桃園機場 (TPE)</p>
+              <p class="text-[11px] text-slate-400 truncate">晶華酒店出發、4人4箱、長榮BR87、九人座</p>
+            </button>
+
+            <button onclick="fillScenario('songshan')" class="w-full text-left p-2.5 rounded-xl bg-slate-950/60 hover:bg-slate-950 border border-slate-800 text-xs transition">
+              <p class="font-semibold text-sky-300">✈️ 預約送機：台北松山機場 (TSA)</p>
+              <p class="text-[11px] text-slate-400 truncate">君悅酒店出發、2人2箱、日航JL098、轎車</p>
+            </button>
+
+            <button onclick="fillScenario('return_arrival')" class="w-full text-left p-2.5 rounded-xl bg-sky-950/40 hover:bg-sky-950/70 border border-sky-500/40 text-xs transition">
+              <p class="font-semibold text-emerald-300">🛬 測試返台接機 (觸發回程不空車)</p>
+              <p class="text-[11px] text-slate-400 truncate">桃機二航返台北信義區、班機BR88、實收加倍</p>
+            </button>
+
+            <button onclick="fillScenario('rejection')" class="w-full text-left p-2.5 rounded-xl bg-rose-950/30 hover:bg-rose-950/50 border border-rose-500/30 text-xs transition">
+              <p class="font-semibold text-rose-300">⚠️ 測試非機場防呆拒絕 (去九份)</p>
+              <p class="text-[11px] text-slate-400 truncate">測試非機場行程被系統精準婉拒</p>
+            </button>
+
+            <button onclick="fillScenario('template')" class="w-full text-left p-2.5 rounded-xl bg-slate-950/60 hover:bg-slate-950 border border-slate-800 text-xs transition">
+              <p class="font-semibold text-indigo-300">📋 結構化格式叫車 (上車/機場/星宇航班)</p>
+              <p class="text-[11px] text-slate-400 truncate">Key: Value 條列式預約範例</p>
+            </button>
+
+            <button onclick="fillScenario('help')" class="w-full text-left p-2.5 rounded-xl bg-slate-950/60 hover:bg-slate-950 border border-slate-800 text-xs transition">
+              <p class="font-semibold text-slate-300">❓ 查看叫車格式說明 (/help)</p>
+              <p class="text-[11px] text-slate-400 truncate">機器人回傳歡迎與送機規範卡片</p>
+            </button>
+          </div>
+
+        </div>
+
+        <!-- 右側：LINE 聊天室介面 (2 cols) -->
+        <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl flex flex-col h-[650px] overflow-hidden">
+          
+          <div class="bg-slate-850 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-white text-sm">
+                <i class="fa-solid fa-users"></i>
+              </div>
+              <div>
+                <h2 id="chatHeaderTitle" class="text-sm font-bold text-white">台北五星飯店禮賓部送機群</h2>
+                <p class="text-[11px] text-emerald-400 flex items-center gap-1 font-mono">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 智慧送機機器人已在此群組連線
+                </p>
+              </div>
+            </div>
+
+            <button onclick="clearChatLog()" class="text-xs text-slate-400 hover:text-slate-200">
+              <i class="fa-regular fa-trash-can mr-1"></i> 清空對話
+            </button>
+          </div>
+
+          <!-- 訊息串流 -->
+          <div id="chatMessages" class="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-950 chat-scroll">
+            <div class="flex justify-center">
+              <span class="text-[11px] bg-slate-800 text-slate-400 px-3 py-1 rounded-full border border-slate-700">
+                台北機場專車機器人已加入此群組
+              </span>
+            </div>
+          </div>
+
+          <!-- 輸入表單 -->
+          <form id="chatForm" onsubmit="sendMessage(event)" class="p-3 bg-slate-900 border-t border-slate-800 flex items-end space-x-2">
+            <div class="flex-1">
+              <textarea id="messageInput" rows="2" placeholder="在此群組輸入自然語言或貼上送機叫車需求..." required class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 resize-none"></textarea>
+            </div>
+            <button type="submit" id="sendBtn" class="px-4 py-3 bg-emerald-600 hover:bg-emerald-500 active:scale-95 rounded-xl text-xs font-bold text-white shadow transition flex items-center gap-1.5 h-10">
+              <span>發送</span>
+              <i class="fa-regular fa-paper-plane"></i>
+            </button>
+          </form>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== 分頁 4: 群組串接與設定指南 ==================== -->
+    <section id="tab-guide" class="tab-content space-y-6">
+      <div class="max-w-4xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+        
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-brands fa-line text-emerald-400 text-2xl"></i>
+            <span>如何將此機器人加入您目前所在的各個 LINE 叫車群組？</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">因為您已經是所有叫車群組的成員，串接過程只需幾秒鐘即可完成！</p>
+        </div>
+
+        <!-- 品牌機器人視覺與資料設定包 -->
+        <div class="bg-gradient-to-r from-slate-900 to-indigo-950/40 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col md:flex-row items-center justify-between gap-5">
+          <div class="flex items-center space-x-4">
+            <div class="relative w-20 h-20 rounded-2xl overflow-hidden border-2 border-amber-400/60 shadow-lg flex-shrink-0 bg-slate-900">
+              <img src="/static/bot_avatar.jpg" alt="專車機器人頭像" class="w-full h-full object-cover">
+            </div>
+            <div class="space-y-1 text-xs">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">專屬品牌視覺</span>
+                <span class="text-white font-bold text-sm">台北機場專車・智慧派車小幫手</span>
+              </div>
+              <p class="text-slate-400">已為您設計好車隊專屬頭像與品牌介紹，建立官方帳號時可直接上傳使用！</p>
+              <p class="text-slate-500 text-[11px]">簡介：專營台北/新北前往桃園機場 (TPE) 與松山機場 (TSA) 24小時送機專車調度</p>
+            </div>
+          </div>
+          <a href="/static/bot_avatar.jpg" download="台北機場專車機器人頭像.jpg" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition shadow flex items-center gap-1.5 flex-shrink-0">
+            <i class="fa-solid fa-download"></i>
+            <span>下載機器人頭像圖檔</span>
+          </a>
+        </div>
+
+        <!-- 4 步驟圖文指南 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          
+          <div class="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-2">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/20 text-sky-300">步驟 1</span>
+            <h3 class="text-sm font-bold text-white">開啟 LINE Bot 允許加入群組設定</h3>
+            <p class="text-slate-400">至 <a href="https://manager.line.biz/" target="_blank" class="text-sky-400 underline">LINE Official Account Manager</a> 點選設定：</p>
+            <ul class="list-disc pl-4 space-y-1 text-slate-300">
+              <li>帳號設定 ➔「允許加入群組與多人聊天室」➔ 設為 <strong>允許</strong></li>
+              <li>回應設定 ➔ 回應模式設為 <strong>Bot</strong></li>
+              <li>自動回應訊息 ➔ 設為 <strong>停用</strong> (避免重複干擾)</li>
+              <li>Webhook ➔ 設為 <strong>開啟</strong></li>
+            </ul>
+          </div>
+
+          <div class="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-2">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300">步驟 2</span>
+            <h3 class="text-sm font-bold text-white">將機器人一鍵拉進您的各個 LINE 群組</h3>
+            <p class="text-slate-400">打開您的個人手機 LINE：</p>
+            <ul class="list-disc pl-4 space-y-1 text-slate-300">
+              <li>先將您的官方帳號機器人加為好友。</li>
+              <li>進入您所在的各個叫車群組 ➔ 點擊右上角選單 (☰) ➔ <strong>邀請</strong> ➔ 勾選該機器人加入。</li>
+              <li>機器人進入後將自動發送歡迎橫幅，並自動在調度平台註冊該群組！</li>
+            </ul>
+          </div>
+
+          <div class="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300">步驟 3</span>
+              <span id="tunnelStatusBadge" class="text-[10px] font-semibold text-slate-400">⚪ 通道未開啟</span>
+            </div>
+            <h3 class="text-sm font-bold text-white">啟動公開通道 & 設定 Webhook</h3>
+            <p class="text-slate-400">點擊下方按鈕免費取得全球可連的公開 HTTPS 網址：</p>
+            
+            <div class="flex space-x-2">
+              <button type="button" id="tunnelStartBtn" onclick="toggleTunnel()" class="flex-1 py-2 bg-gradient-to-r from-amber-500 to-sky-600 hover:from-amber-400 hover:to-sky-500 active:scale-95 rounded-lg text-xs font-bold text-slate-950 shadow transition flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-tower-broadcast"></i>
+                <span id="tunnelBtnText">⚡ 一鍵啟動 Cloudflare 公開通道</span>
+              </button>
+            </div>
+
+            <!-- 顯示生成的 Webhook URL -->
+            <div class="space-y-1 pt-1">
+              <label class="text-[10px] text-slate-400">LINE Webhook 填寫網址：</label>
+              <div class="flex items-center space-x-1.5">
+                <input type="text" id="liveWebhookUrlInput" readonly value="https://<請點擊上方按鈕啟動通道>/api/line/webhook" class="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 font-mono text-[11px] text-sky-300 select-all">
+                <button type="button" onclick="copyWebhookUrl()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-[11px] text-slate-300">
+                  <i class="fa-regular fa-copy"></i>
+                </button>
+              </div>
+            </div>
+
+            <p class="text-slate-500 text-[10px]">至 <a href="https://developers.line.biz/" target="_blank" class="text-sky-400 underline">LINE Developers Console</a> 貼上後點擊 Verify，並開啟 Use Webhook 即可！</p>
+          </div>
+
+          <div class="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300">步驟 4</span>
+              <span id="lineLiveStatusBadge" class="text-[10px] font-semibold text-slate-400">檢查連線狀態中...</span>
+            </div>
+            <h3 class="text-sm font-bold text-white">線上直接填寫金鑰啟用連線</h3>
+            <p class="text-slate-400">從 LINE Developers 複製後直接貼在下方儲存，免開設定檔：</p>
+            <form onsubmit="saveLineCredentials(event)" class="space-y-2">
+              <input type="text" id="cfgChannelSecret" placeholder="貼上 Channel Secret" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500">
+              <input type="text" id="cfgChannelToken" placeholder="貼上 Channel Access Token (long-lived)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500">
+              <button type="submit" class="w-full py-2 bg-sky-600 hover:bg-sky-500 rounded-lg text-xs font-semibold text-white shadow transition">
+                儲存金鑰並啟用即時連線
+              </button>
+            </form>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 派車分配 Modal -->
+  <div id="assignModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-white flex items-center space-x-2">
+          <i class="fa-solid fa-car-side text-sky-400"></i>
+          <span>指派送機司機 - 單號 #<span id="modalTripId"></span></span>
+        </h3>
+        <button onclick="closeAssignModal()" class="text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="bg-slate-950/80 p-3 rounded-xl border border-slate-800 text-xs space-y-1.5">
+        <p class="text-slate-400">目的地機場：<span id="modalAirport" class="text-sky-400 font-semibold"></span></p>
+        <p class="text-slate-400">上車地點：<span id="modalPickup" class="text-white font-medium"></span></p>
+        <p class="text-slate-400">出發時間：<span id="modalTime" class="text-amber-400 font-medium"></span></p>
+        <p class="text-slate-400">需求規格：<span id="modalPax" class="text-slate-300"></span></p>
+      </div>
+
+      <div class="space-y-2">
+        <label class="text-xs font-semibold text-slate-300">選擇接單司機：</label>
+        <select id="modalDriverSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-sky-500">
+          <!-- JS 填充 -->
+        </select>
+        <p class="text-[11px] text-slate-400">
+          <i class="fa-brands fa-line text-emerald-400 mr-1"></i>
+          確認派車後，系統將自動向客戶所在的 LINE 群組推播司機車牌、姓名與聯絡電話卡片！
+        </p>
+      </div>
+
+      <div class="flex space-x-3 pt-2">
+        <button onclick="closeAssignModal()" class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-medium text-slate-300 transition">
+          取消
+        </button>
+        <button onclick="confirmAssignment()" class="flex-1 px-4 py-2 bg-sky-600 hover:bg-sky-500 rounded-xl text-xs font-semibold text-white transition shadow">
+          確認派車並通知群組
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增司機 Modal -->
+  <div id="addDriverModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-white">新增車隊司機</h3>
+        <button onclick="closeAddDriverModal()" class="text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <form id="addDriverForm" onsubmit="submitNewDriver(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-300 mb-1">司機姓名 / 稱呼</label>
+          <input type="text" id="newDriverName" required placeholder="例如：陳大明 (老陳)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500">
+        </div>
+        <div>
+          <label class="block text-slate-300 mb-1">聯絡手機</label>
+          <input type="text" id="newDriverPhone" required placeholder="0912-345-678" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500">
+        </div>
+        <div>
+          <label class="block text-slate-300 mb-1">車輛款式與顏色</label>
+          <input type="text" id="newDriverVehicle" required placeholder="例如：Toyota Camry Hybrid (黑)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-300 mb-1">車牌號碼</label>
+            <input type="text" id="newDriverPlate" required placeholder="例如：TDH-8821" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500">
+          </div>
+          <div>
+            <label class="block text-slate-300 mb-1">車型分類</label>
+            <select id="newDriverType" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500">
+              <option value="標準轎車 (4人座)">標準轎車 (4人座)</option>
+              <option value="休旅車 SUV (4-6人座)">休旅車 SUV (4-6人座)</option>
+              <option value="商務九人座 (T6/Alphard)">商務九人座 (T6/Alphard)</option>
+              <option value="頂級保母車">頂級保母車</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex space-x-3 pt-3">
+          <button type="button" onclick="closeAddDriverModal()" class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-medium text-slate-300">
+            取消
+          </button>
+          <button type="submit" class="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-semibold text-white shadow">
+            儲存司機資料
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 後車廂容積與行李指南 Modal -->
+  <div id="luggageGuideModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-suitcase-rolling text-sky-400"></i>
+          <span>台灣專車後車廂容積真實對照指南</span>
+        </h3>
+        <button onclick="toggleLuggageGuideModal()" class="text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs text-slate-300 max-h-[70vh] overflow-y-auto pr-1">
+        <p class="text-slate-400 leading-relaxed">
+          出國行李體積是機場專車最重要的核心！許多旅客以「4人座可載4人+4件大行李」誤解轎車空間，導致司機出車現場放不下而拒載延誤班機。請參考以下台灣各大車型之真實容積極限：
+        </p>
+
+        <!-- 車型容積對照表格 -->
+        <div class="border border-slate-800 rounded-xl overflow-hidden">
+          <table class="w-full text-left text-[11px]">
+            <thead class="bg-slate-950 text-slate-400">
+              <tr>
+                <th class="p-2.5">車款級距</th>
+                <th class="p-2.5">建議乘客</th>
+                <th class="p-2.5">後車廂大箱上限 (28~32吋)</th>
+                <th class="p-2.5">登機箱 (20~24吋)</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr class="bg-slate-900/50">
+                <td class="p-2.5 font-bold text-white">標準轎車<br><span class="text-[10px] text-slate-400 font-normal">Camry / Altis</span></td>
+                <td class="p-2.5 text-amber-300">1 ~ 3 人 (4人無座椅空間)</td>
+                <td class="p-2.5 text-sky-300 font-bold">最多 2 件大箱</td>
+                <td class="p-2.5 text-slate-300">+ 1~2 件登機箱</td>
+              </tr>
+              <tr class="bg-slate-900">
+                <td class="p-2.5 font-bold text-white">休旅車 SUV<br><span class="text-[10px] text-slate-400 font-normal">RAV4 / CRV</span></td>
+                <td class="p-2.5 text-amber-300">1 ~ 4 人</td>
+                <td class="p-2.5 text-sky-300 font-bold">最多 3 ~ 4 件大箱</td>
+                <td class="p-2.5 text-slate-300">+ 2 件登機箱</td>
+              </tr>
+              <tr class="bg-slate-900/50">
+                <td class="p-2.5 font-bold text-emerald-400">商務九人座<br><span class="text-[10px] text-slate-400 font-normal">Alphard / T6 / Granvia</span></td>
+                <td class="p-2.5 text-emerald-300 font-bold">4 ~ 8 人</td>
+                <td class="p-2.5 text-emerald-400 font-bold">6 ~ 8 件大箱</td>
+                <td class="p-2.5 text-slate-300">各類球袋、推車均可放</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="bg-amber-950/30 border border-amber-500/30 rounded-xl p-3 text-[11px] text-amber-200 space-y-1">
+          <p class="font-bold flex items-center gap-1.5 text-amber-300">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>特殊物品空間提醒：</span>
+          </p>
+          <p>• <strong>高爾夫球具 / 嬰兒推車 / 摺疊輪椅</strong>：約佔用 1.2 ~ 1.5 件大箱空間，轎車載滿 3 人以上時極可能放不下，強烈建議選用【休旅車 SUV】或【商務九人座】。</p>
+          <p>• <strong>乘客座椅安全法規</strong>：台灣交通法規嚴禁行李堆置阻擋後照鏡或超重堆疊影響行車安全，後座坐滿時無法在座椅堆放大行李。</p>
+        </div>
+      </div>
+
+      <div class="pt-2 border-t border-slate-800">
+        <button type="button" onclick="toggleLuggageGuideModal()" class="w-full py-2.5 bg-sky-600 hover:bg-sky-500 rounded-xl text-xs font-bold text-white transition shadow">
+          我瞭解了，關閉說明
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

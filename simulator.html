@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LINE 多群組互動模擬器 - 台北機場專車</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .chat-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-scroll::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    .chat-scroll::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans">
+
+  <!-- 頂部導航 -->
+  <header class="bg-slate-800 border-b border-slate-700 px-4 py-3 sticky top-0 z-30 shadow">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="h-9 w-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg">
+          <i class="fa-brands fa-line"></i>
+        </div>
+        <div>
+          <h1 class="text-base font-bold text-white flex items-center gap-2">
+            <span>LINE 多群組叫車即時模擬器</span>
+            <span class="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">沙盒測試環境</span>
+          </h1>
+          <p class="text-xs text-slate-400">模擬台北各飯店禮賓部、豪宅社區與旅行社 LINE 叫車群組的真實對話</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <a href="/" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-semibold text-white transition flex items-center gap-1.5">
+          <i class="fa-solid fa-gauge"></i>
+          <span>調度控制中心</span>
+        </a>
+        <a href="/driver" target="_blank" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold text-white transition flex items-center gap-1.5 shadow">
+          <i class="fa-solid fa-car"></i>
+          <span>司機接單端</span>
+          <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- 模擬器佈局 -->
+  <main class="flex-1 max-w-6xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- 左側欄位：群組切換與一鍵情境 (1 col) -->
+    <div class="space-y-4">
+      
+      <!-- 群組切換器 -->
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 shadow-lg space-y-3">
+        <label class="block text-xs font-bold text-slate-300">
+          <i class="fa-solid fa-users-viewfinder text-sky-400 mr-1"></i> 切換模擬 LINE 群組：
+        </label>
+        <select id="simGroupSelect" onchange="onGroupChanged()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500">
+          <!-- JS 填充 -->
+        </select>
+
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-1">模擬發話者稱呼：</label>
+          <input type="text" id="simSenderName" value="晶華酒店禮賓部" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+        </div>
+      </div>
+
+      <!-- 一鍵測試情境 -->
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 shadow-lg space-y-2.5">
+        <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
+          <i class="fa-solid fa-bolt text-amber-400"></i>
+          <span>一鍵快速測試情境 (繁體中文)</span>
+        </h3>
+        <p class="text-[11px] text-slate-400">點擊以下按鈕自動帶入台北真實送機訊息：</p>
+
+        <button onclick="fillScenario('taoyuan')" class="w-full text-left p-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-700/60 text-xs transition">
+          <p class="font-semibold text-sky-300">✈️ 預約送機：桃園機場 (TPE)</p>
+          <p class="text-[11px] text-slate-400 truncate">晶華酒店出發、4人4箱、長榮BR87、九人座</p>
+        </button>
+
+        <button onclick="fillScenario('songshan')" class="w-full text-left p-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-700/60 text-xs transition">
+          <p class="font-semibold text-sky-300">✈️ 預約送機：台北松山機場 (TSA)</p>
+          <p class="text-[11px] text-slate-400 truncate">信義區出發、2人2箱、日航JL098、轎車</p>
+        </button>
+
+        <button onclick="fillScenario('rejection')" class="w-full text-left p-2.5 rounded-xl bg-rose-950/30 hover:bg-rose-950/50 border border-rose-500/30 text-xs transition">
+          <p class="font-semibold text-rose-300">⚠️ 測試非機場防呆拒絕 (去九份)</p>
+          <p class="text-[11px] text-slate-400 truncate">測試非機場行程被系統精準婉拒</p>
+        </button>
+
+        <button onclick="fillScenario('template')" class="w-full text-left p-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-700/60 text-xs transition">
+          <p class="font-semibold text-indigo-300">📋 結構化格式叫車 (上車/機場/星宇航班)</p>
+          <p class="text-[11px] text-slate-400 truncate">Key: Value 條列式預約範例</p>
+        </button>
+
+        <button onclick="fillScenario('help')" class="w-full text-left p-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-700/60 text-xs transition">
+          <p class="font-semibold text-slate-300">❓ 查看叫車格式說明 (/help)</p>
+          <p class="text-[11px] text-slate-400 truncate">機器人回傳歡迎與送機規範卡片</p>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- 右側欄位：LINE 聊天視窗 (2 cols) -->
+    <div class="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl flex flex-col h-[650px] overflow-hidden">
+      
+      <!-- 聊天視窗頂部 -->
+      <div class="bg-slate-850 px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-white text-sm">
+            <i class="fa-solid fa-users"></i>
+          </div>
+          <div>
+            <h2 id="chatHeaderTitle" class="text-sm font-bold text-white">台北五星飯店禮賓部送機群</h2>
+            <p class="text-[11px] text-emerald-400 flex items-center gap-1 font-mono">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 智慧送機機器人已在此群組連線
+            </p>
+          </div>
+        </div>
+
+        <button onclick="clearChatLog()" class="text-xs text-slate-400 hover:text-slate-200">
+          <i class="fa-regular fa-trash-can mr-1"></i> 清空對話
+        </button>
+      </div>
+
+      <!-- 訊息串流 -->
+      <div id="chatMessages" class="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-950 chat-scroll">
+        <!-- 初始訊息 -->
+        <div class="flex justify-center">
+          <span class="text-[11px] bg-slate-800 text-slate-400 px-3 py-1 rounded-full border border-slate-700">
+            台北機場專車機器人已加入此群組
+          </span>
+        </div>
+      </div>
+
+      <!-- 輸入表單 -->
+      <form id="chatForm" onsubmit="sendMessage(event)" class="p-3 bg-slate-850 border-t border-slate-700 flex items-end space-x-2">
+        <div class="flex-1">
+          <textarea id="messageInput" rows="2" placeholder="在此群組輸入自然語言或貼上送機叫車需求..." required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 resize-none"></textarea>
+        </div>
+        <button type="submit" id="sendBtn" class="px-4 py-3 bg-emerald-600 hover:bg-emerald-500 active:scale-95 rounded-xl text-xs font-bold text-white shadow transition flex items-center gap-1.5 h-10">
+          <span>發送</span>
+          <i class="fa-regular fa-paper-plane"></i>
+        </button>
+      </form>
+
+    </div>
+
+  </main>
+
+  <script src="/static/simulator.js"></script>
+</body>
+</html>
