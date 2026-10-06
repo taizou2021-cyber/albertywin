@@ -28,15 +28,7 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import os
-    if not os.environ.get("VERCEL"):
-        try:
-            from tunnel_manager import tunnel_mgr
-            from config import PORT
-            tunnel_mgr.start_tunnel(port=PORT)
-            logger.info("自動啟動 Cloudflare 全球加密公開通道...")
-        except Exception as e:
-            logger.warning("無法自動啟動通道: %s", e)
+    # 手動需要公網網址時才透過 /api/tunnel/start 啟動，避免背景重載彈出視窗
     yield
 
 app = FastAPI(
@@ -47,11 +39,7 @@ app = FastAPI(
 )
 
 # CORS
-app.add_middleware(STATIC_DIR = Path(__file__).resolve().parent / "static"
-if not STATIC_DIR.exists():
-    STATIC_DIR = Path(__file__).resolve().parent
-
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
@@ -60,6 +48,9 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 )
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+if not STATIC_DIR.exists():
+    STATIC_DIR = Path(__file__).resolve().parent
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
