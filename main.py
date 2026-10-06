@@ -47,7 +47,11 @@ app = FastAPI(
 )
 
 # CORS
-app.add_middleware(
+app.add_middleware(STATIC_DIR = Path(__file__).resolve().parent / "static"
+if not STATIC_DIR.exists():
+    STATIC_DIR = Path(__file__).resolve().parent
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
