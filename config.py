@@ -1,10 +1,12 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR / ".env")
-
+try:
+    from dotenv import load_dotenv
+    BASE_DIR = Path(__file__).resolve().parent
+    load_dotenv(BASE_DIR / ".env")
+except Exception:
+    pass
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 
