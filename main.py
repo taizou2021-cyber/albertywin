@@ -388,15 +388,22 @@ class LineKeysRequest(BaseModel):
 class GoogleMapsKeyRequest(BaseModel):
     google_maps_api_key: str
 
+class LiffIdRequest(BaseModel):
+    liff_id: str
+
 @app.get("/api/settings/status")
 def get_settings_status():
     import config
     has_secret = bool(config.LINE_CHANNEL_SECRET)
     has_token = bool(config.LINE_CHANNEL_ACCESS_TOKEN)
     has_gmap = bool(config.GOOGLE_MAPS_API_KEY)
+    has_liff = bool(getattr(config, "LINE_LIFF_ID", ""))
+    liff_id = getattr(config, "LINE_LIFF_ID", "")
     return {
         "is_configured": has_secret and has_token,
         "has_google_maps_key": has_gmap,
+        "has_liff": has_liff,
+        "liff_id": liff_id,
         "google_maps_key_masked": f"{config.GOOGLE_MAPS_API_KEY[:4]}...{config.GOOGLE_MAPS_API_KEY[-4:]}" if has_gmap and len(config.GOOGLE_MAPS_API_KEY) >= 8 else ("已設定" if has_gmap else "未設定 (已啟用北台灣高頻地標庫)"),
         "channel_secret_masked": f"{config.LINE_CHANNEL_SECRET[:4]}...{config.LINE_CHANNEL_SECRET[-4:]}" if has_secret and len(config.LINE_CHANNEL_SECRET) >= 8 else ("已設定" if has_secret else "未設定"),
         "channel_token_masked": f"{config.LINE_CHANNEL_ACCESS_TOKEN[:6]}...{config.LINE_CHANNEL_ACCESS_TOKEN[-6:]}" if has_token and len(config.LINE_CHANNEL_ACCESS_TOKEN) >= 12 else ("已設定" if has_token else "未設定")
@@ -443,6 +450,25 @@ def update_google_maps_key(req: GoogleMapsKeyRequest):
         f.write("\n".join(existing_lines) + "\n")
         
     return {"status": "ok", "message": "Google Maps Platform API 金鑰儲存成功！全台地址即時自動聯想已啟用！"}
+
+@app.post("/api/settings/liff-id")
+def update_liff_id(req: LiffIdRequest):
+    import config
+    liff_id = req.liff_id.strip()
+    config.LINE_LIFF_ID = liff_id
+    
+    env_file = Path(__file__).resolve().parent / ".env"
+    existing_lines = []
+    if env_file.exists():
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.startswith("LINE_LIFF_ID="):
+                    existing_lines.append(line.rstrip("\r\n"))
+    existing_lines.append(f"LINE_LIFF_ID={liff_id}")
+    with open(env_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(existing_lines) + "\n")
+        
+    return {"status": "ok", "message": "LINE LIFF 小程式 ID 儲存成功！", "liff_url": f"https://liff.line.me/{liff_id}" if liff_id else ""}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host=HOST, port=PORT, reload=True)

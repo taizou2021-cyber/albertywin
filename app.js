@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initBookingDate();
   onLuggageOrPaxChanged();
   initLocationAutocomplete();
+  initLiffApp();
   checkTunnelStatus();
   setInterval(checkTunnelStatus, 8000);
 });
@@ -1090,6 +1091,27 @@ async function checkLineSettingsStatus() {
         gmapBadge.innerHTML = `<span class="text-amber-400 font-medium">⚪ 未設定金鑰 (使用北台灣地標庫)</span>`;
       }
     }
+
+    const liffBadge = document.getElementById('liffStatusBadge');
+    const liffUrlBox = document.getElementById('liffUrlDisplay');
+    const liffInput = document.getElementById('liffGeneratedUrl');
+    const cfgLiffInput = document.getElementById('cfgLiffId');
+    if (liffBadge) {
+      if (data.has_liff) {
+        liffBadge.innerHTML = `<span class="text-emerald-400 font-bold flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>🟢 LIFF 小程式已就緒</span>`;
+        if (liffUrlBox && liffInput) {
+          liffInput.value = `https://liff.line.me/${data.liff_id}`;
+          liffUrlBox.classList.remove('hidden');
+        }
+        if (cfgLiffInput && !cfgLiffInput.value) {
+          cfgLiffInput.value = data.liff_id;
+        }
+        window.APP_LIFF_ID = data.liff_id;
+        initLiffApp();
+      } else {
+        liffBadge.innerHTML = `<span class="text-amber-400 font-medium">⚪ 尚未填入 LIFF ID</span>`;
+      }
+    }
   } catch (err) {
     console.error(err);
   }
@@ -1145,6 +1167,77 @@ async function saveGoogleMapsKey(e) {
     }
   } catch (err) {
     alert('網路連線失敗。');
+  }
+}
+
+async function saveLiffId(e) {
+  e.preventDefault();
+  const liffId = document.getElementById('cfgLiffId').value.trim();
+  if (!liffId) {
+    alert('請填寫 LINE LIFF ID！');
+    return;
+  }
+  try {
+    const res = await fetch('/api/settings/liff-id', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ liff_id: liffId })
+    });
+    if (res.ok) {
+      alert('🎉 恭喜！LINE LIFF 小程式 ID 儲存成功，LINE 專屬免下載短網址已生成！');
+      checkLineSettingsStatus();
+    } else {
+      alert('儲存失敗，請檢查格式。');
+    }
+  } catch (err) {
+    alert('網路連線失敗。');
+  }
+}
+
+function copyLiffUrl() {
+  const input = document.getElementById('liffGeneratedUrl');
+  if (input) {
+    input.select();
+    navigator.clipboard.writeText(input.value);
+    alert('📋 LINE LIFF 小程式短網址已複製！您可以直接貼在 LINE 官方帳號的圖文選單、群組公告或朋友對話中！');
+  }
+}
+
+let currentLiffProfile = null;
+
+async function initLiffApp() {
+  if (typeof liff === 'undefined') return;
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const liffId = urlParams.get('liffId') || window.APP_LIFF_ID;
+  if (!liffId) return;
+
+  try {
+    await liff.init({ liffId });
+    if (liff.isLoggedIn()) {
+      currentLiffProfile = await liff.getProfile();
+      updateLiffUi(currentLiffProfile);
+    } else if (liff.isInClient()) {
+      liff.login();
+    }
+  } catch (err) {
+    console.warn('LIFF 初始化提醒:', err);
+  }
+}
+
+function updateLiffUi(profile) {
+  if (!profile) return;
+  const nameInput = document.getElementById('bookName');
+  if (nameInput && !nameInput.value) {
+    nameInput.value = profile.displayName || '';
+  }
+  const banner = document.getElementById('liffUserBanner');
+  const avatar = document.getElementById('liffUserAvatar');
+  const nameSpan = document.getElementById('liffUserName');
+  if (banner && avatar && nameSpan) {
+    avatar.src = profile.pictureUrl || '/static/bot_avatar.jpg';
+    nameSpan.innerText = profile.displayName || 'LINE 用戶';
+    banner.classList.remove('hidden');
   }
 }
 

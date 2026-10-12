@@ -6,6 +6,8 @@
   <title>台北機場專車 - 全功能智慧調度與接單系統</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- LINE 官方 LIFF 小程式 SDK (LINE Front-end Framework) -->
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     .chat-scroll::-webkit-scrollbar {
       width: 6px;
@@ -420,7 +422,20 @@
 
           <form id="customerBookingForm" onsubmit="submitCustomerBooking(event)" class="space-y-4 text-xs">
             
-            <!-- 1. 行程類型切換 (送機 vs 接機) -->
+            <!-- LINE 小程式 (LIFF) 自動免密身分識別橫幅 -->
+            <div id="liffUserBanner" class="hidden p-3 rounded-xl bg-gradient-to-r from-emerald-950/60 to-slate-900 border border-emerald-500/40 flex items-center justify-between shadow">
+              <div class="flex items-center space-x-2.5">
+                <img id="liffUserAvatar" src="/static/bot_avatar.jpg" alt="LINE" class="w-8 h-8 rounded-full border-2 border-emerald-400 object-cover shadow">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-500 text-slate-950 font-mono">LINE 認證</span>
+                    <strong id="liffUserName" class="text-xs text-white"></strong>
+                  </div>
+                  <p class="text-[10px] text-slate-400">已自動同步您的 LINE 稱呼，預約免註冊</p>
+                </div>
+              </div>
+              <span class="text-emerald-400 text-base"><i class="fa-brands fa-line text-lg"></i></span>
+            </div>
             <div>
               <label class="block text-slate-300 font-semibold mb-1.5">1. 選擇專車服務類型：</label>
               <div class="grid grid-cols-2 gap-2">
@@ -942,6 +957,42 @@
               <span>💡 未設定金鑰時，系統亦內建北台灣各大飯店、高鐵站、捷運轉運點高頻備用庫。</span>
               <a href="https://mapsplatform.google.com/maps-demo-key?utm_campaign=gmp_git_agentskills_v1" target="_blank" class="text-amber-400 hover:underline flex items-center gap-1">
                 <span>申請免費 Maps Demo Key</span>
+                <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+              </a>
+            </div>
+          </div>
+
+          <!-- LINE LIFF 小程式 (WeChat 小程序同級功能) 設定卡片 -->
+          <div class="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-3 md:col-span-2">
+            <div class="flex items-center justify-between">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300">LINE 小程式 (LIFF)</span>
+              <span id="liffStatusBadge" class="text-[10px] font-semibold text-slate-400">檢查中...</span>
+            </div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-brands fa-line text-emerald-400 text-lg"></i>
+              <span>LINE 官方小程式 (LIFF) 串接：免下載 App 即可在 LINE 內滑出預約</span>
+            </h3>
+            <p class="text-slate-400 text-xs">
+              如同「微信小程序 (WeChat Mini Program)」，乘客在 LINE 聊天室點擊短網址，就能直接滑出預約視窗，並自動帶入 LINE 暱稱與頭像！
+            </p>
+            <form onsubmit="saveLiffId(event)" class="flex flex-col sm:flex-row gap-2">
+              <input type="text" id="cfgLiffId" placeholder="貼上 LINE LIFF ID (例如：2001234567-AbCdEfGh)" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500 font-mono">
+              <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold text-white shadow transition whitespace-nowrap">
+                儲存 LIFF ID
+              </button>
+            </form>
+            <div id="liffUrlDisplay" class="hidden p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-xs space-y-1">
+              <p class="text-emerald-300 font-bold">🎉 您的 LINE 專屬小程式短網址：</p>
+              <div class="flex items-center gap-2">
+                <input type="text" id="liffGeneratedUrl" readonly class="flex-1 bg-slate-900 border border-slate-800 rounded px-2 py-1 font-mono text-[11px] text-emerald-300 select-all">
+                <button type="button" onclick="copyLiffUrl()" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px]">複製</button>
+              </div>
+              <p class="text-[10px] text-slate-400">把這串短網址直接放在 LINE 官方帳號的圖文選單 (Rich Menu) 或群組公告中，客人點擊即可直接滑出小程式！</p>
+            </div>
+            <div class="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1">
+              <span>在 LINE Developers Console ➔ 點選 Channel ➔ LIFF 分頁新增</span>
+              <a href="https://developers.line.biz/console/" target="_blank" class="text-emerald-400 hover:underline flex items-center gap-1">
+                <span>前往 LINE Developers 建立 LIFF →</span>
                 <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
               </a>
             </div>
