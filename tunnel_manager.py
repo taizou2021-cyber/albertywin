@@ -60,13 +60,24 @@ class TunnelManager:
 
         def run_thread():
             try:
+                import os
+                flags = 0
+                startupinfo = None
+                if os.name == "nt":
+                    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = getattr(subprocess, "SW_HIDE", 0)
+
                 cmd = [str(self.cloudflared_path), "tunnel", "--url", f"http://127.0.0.1:{port}"]
                 self.proc = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
-                    bufsize=1
+                    bufsize=1,
+                    creationflags=flags,
+                    startupinfo=startupinfo
                 )
 
                 start_time = time.time()

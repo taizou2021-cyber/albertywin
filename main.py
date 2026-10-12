@@ -272,19 +272,132 @@ async def simulate_group_message(req: SimulatorMessageRequest):
     )
     return res
 
-# --- LINE Settings API ---
+# --- Google Maps Platform Places Autocomplete (New) ---
+# Source: Google Maps Platform Code Assist
+
+TAIWAN_MAJOR_AIRPORT_LOCATIONS = [
+    {"name": "台北晶華酒店大門口 (Regent Taipei)", "address": "台北市中山區中山北路二段39巷3號"},
+    {"name": "台北君悅酒店正門 Lobby (Grand Hyatt Taipei)", "address": "台北市信義區松壽路2號"},
+    {"name": "台北萬豪酒店大廳 (Taipei Marriott Hotel)", "address": "台北市中山區樂群二路199號"},
+    {"name": "台北W飯店 (W Taipei)", "address": "台北市信義區忠孝東路五段10號"},
+    {"name": "台北文華東方酒店 (Mandarin Oriental Taipei)", "address": "台北市松山區敦化北路158號"},
+    {"name": "台北喜來登大飯店 (Sheraton Grand Taipei Hotel)", "address": "台北市中正區忠孝東路一段12號"},
+    {"name": "台北寒舍艾美酒店 (Le Méridien Taipei)", "address": "台北市信義區松仁路38號"},
+    {"name": "台北遠東香格里拉大飯店", "address": "台北市大安區敦化南路二段201號"},
+    {"name": "圓山大飯店 (The Grand Hotel)", "address": "台北市中山區中山北路四段1號"},
+    {"name": "格拉斯麗台北飯店 (Hotel Gracery Taipei)", "address": "台北市中正區忠孝東路二段89號"},
+    {"name": "台北車站 (東三門 / 西三門接送區)", "address": "台北市中正區北平西路3號"},
+    {"name": "南港展覽館一館 / 二館", "address": "台北市南港區經貿二路1號"},
+    {"name": "板橋車站 / 新板特區 (縣民大道)", "address": "新北市板橋區縣民大道二段7號"},
+    {"name": "台北101觀景台 / 大樓正門", "address": "台北市信義區信義路五段7號"},
+    {"name": "信義區豪宅特區 / 象山社區", "address": "台北市信義區信義路五段松仁路口"},
+    {"name": "大安森林公園捷運站出口", "address": "台北市大安區信義路三段100號"},
+    {"name": "內湖科技園區 (瑞光路 / 洲子街)", "address": "台北市內湖區瑞光路399號"},
+    {"name": "新店裕隆城 / 家樂福新店店", "address": "新北市新店區中興路三段128號"},
+    {"name": "中和環球購物中心", "address": "新北市中和區中山路三段122號"},
+    {"name": "新莊副都心 / 宏匯廣場", "address": "新北市新莊區新北大道四段3號"},
+    {"name": "桃園高鐵站 (前站 / 後站)", "address": "桃園市中壢區高鐵北路一段6號"},
+    {"name": "林口三井Outlet (文化三路門口)", "address": "新北市林口區文化三路一段356號"},
+    {"name": "桃園國際機場 (TPE) 第一航廈", "address": "桃園市大園區航站南路15號"},
+    {"name": "桃園國際機場 (TPE) 第二航廈", "address": "桃園市大園區航站南路9號"},
+    {"name": "台北松山機場 (TSA) 國際線/國內線", "address": "台北市松山區敦化北路340-9號"}
+]
+
+@app.get("/api/places/autocomplete")
+def autocomplete_places(input: str = Query(..., min_length=1), session_token: Optional[str] = None):
+    import config
+    import urllib.request
+    
+    query = input.strip()
+    if not query:
+        return {"predictions": [], "source": "empty", "api_key_configured": bool(config.GOOGLE_MAPS_API_KEY)}
+        
+    api_key = config.GOOGLE_MAPS_API_KEY.strip() if config.GOOGLE_MAPS_API_KEY else ""
+    
+    if api_key:
+        try:
+            req_body = {
+                "input": query,
+                "includedRegionCodes": ["tw"],
+                "locationBias": {
+                    "circle": {
+                        "center": {"latitude": 25.0478, "longitude": 121.5170},
+                        "radius": 50000.0
+                    }
+                }
+            }
+            if session_token:
+                req_body["sessionToken"] = session_token
+
+            url = "https://places.googleapis.com/v1/places:autocomplete"
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(req_body).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Goog-Api-Key": api_key,
+                    "X-Goog-Maps-Solution-ID": "gmp_git_agentskills_v1",
+                    "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.text.text,suggestions.placePrediction.structuredFormat.mainText.text,suggestions.placePrediction.structuredFormat.secondaryText.text"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=4) as response:
+                result = json.loads(response.read().decode("utf-8"))
+                predictions = []
+                for s in result.get("suggestions", []):
+                    p = s.get("placePrediction")
+                    if p:
+                        main_text = p.get("structuredFormat", {}).get("mainText", {}).get("text") or p.get("text", {}).get("text", "")
+                        secondary_text = p.get("structuredFormat", {}).get("secondaryText", {}).get("text") or ""
+                        full_text = p.get("text", {}).get("text", "")
+                        predictions.append({
+                            "place_id": p.get("placeId", ""),
+                            "main_text": main_text,
+                            "secondary_text": secondary_text,
+                            "full_text": full_text or f"{main_text} {secondary_text}".strip()
+                        })
+                if predictions:
+                    return {"predictions": predictions, "source": "google_maps_places", "api_key_configured": True}
+        except Exception as e:
+            logger.warning("Google Maps Places API Autocomplete 呼叫異常: %s", e)
+
+    # 本地高頻機場接送地標比對（模糊匹配備用）
+    matched = []
+    q_lower = query.lower()
+    for item in TAIWAN_MAJOR_AIRPORT_LOCATIONS:
+        if q_lower in item["name"].lower() or q_lower in item["address"].lower():
+            matched.append({
+                "place_id": f"local_{hash(item['name'])}",
+                "main_text": item["name"],
+                "secondary_text": item["address"],
+                "full_text": f"{item['name']} ({item['address']})"
+            })
+    
+    return {
+        "predictions": matched[:6],
+        "source": "curated_fallback",
+        "api_key_configured": bool(api_key)
+    }
+
+# --- Settings API ---
 
 class LineKeysRequest(BaseModel):
     channel_secret: str
     channel_access_token: str
+
+class GoogleMapsKeyRequest(BaseModel):
+    google_maps_api_key: str
 
 @app.get("/api/settings/status")
 def get_settings_status():
     import config
     has_secret = bool(config.LINE_CHANNEL_SECRET)
     has_token = bool(config.LINE_CHANNEL_ACCESS_TOKEN)
+    has_gmap = bool(config.GOOGLE_MAPS_API_KEY)
     return {
         "is_configured": has_secret and has_token,
+        "has_google_maps_key": has_gmap,
+        "google_maps_key_masked": f"{config.GOOGLE_MAPS_API_KEY[:4]}...{config.GOOGLE_MAPS_API_KEY[-4:]}" if has_gmap and len(config.GOOGLE_MAPS_API_KEY) >= 8 else ("已設定" if has_gmap else "未設定 (已啟用北台灣高頻地標庫)"),
         "channel_secret_masked": f"{config.LINE_CHANNEL_SECRET[:4]}...{config.LINE_CHANNEL_SECRET[-4:]}" if has_secret and len(config.LINE_CHANNEL_SECRET) >= 8 else ("已設定" if has_secret else "未設定"),
         "channel_token_masked": f"{config.LINE_CHANNEL_ACCESS_TOKEN[:6]}...{config.LINE_CHANNEL_ACCESS_TOKEN[-6:]}" if has_token and len(config.LINE_CHANNEL_ACCESS_TOKEN) >= 12 else ("已設定" if has_token else "未設定")
     }
@@ -299,14 +412,37 @@ def update_line_keys(req: LineKeysRequest):
     config.LINE_CHANNEL_ACCESS_TOKEN = token
     
     env_file = Path(__file__).resolve().parent / ".env"
+    existing_lines = []
+    if env_file.exists():
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.startswith(("LINE_CHANNEL_SECRET=", "LINE_CHANNEL_ACCESS_TOKEN=")):
+                    existing_lines.append(line.rstrip("\r\n"))
+    existing_lines.append(f"LINE_CHANNEL_SECRET={secret}")
+    existing_lines.append(f"LINE_CHANNEL_ACCESS_TOKEN={token}")
     with open(env_file, "w", encoding="utf-8") as f:
-        f.write(f"LINE_CHANNEL_SECRET={secret}\n")
-        f.write(f"LINE_CHANNEL_ACCESS_TOKEN={token}\n")
-        f.write(f"PORT={config.PORT}\n")
-        f.write(f"HOST={config.HOST}\n")
-        f.write(f"BASE_URL={config.BASE_URL}\n")
+        f.write("\n".join(existing_lines) + "\n")
         
     return {"status": "ok", "message": "LINE 機器人金鑰儲存成功，即時連線已啟動！"}
+
+@app.post("/api/settings/google-maps-key")
+def update_google_maps_key(req: GoogleMapsKeyRequest):
+    import config
+    key = req.google_maps_api_key.strip()
+    config.GOOGLE_MAPS_API_KEY = key
+    
+    env_file = Path(__file__).resolve().parent / ".env"
+    existing_lines = []
+    if env_file.exists():
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.startswith("GOOGLE_MAPS_API_KEY="):
+                    existing_lines.append(line.rstrip("\r\n"))
+    existing_lines.append(f"GOOGLE_MAPS_API_KEY={key}")
+    with open(env_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(existing_lines) + "\n")
+        
+    return {"status": "ok", "message": "Google Maps Platform API 金鑰儲存成功！全台地址即時自動聯想已啟用！"}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host=HOST, port=PORT, reload=True)

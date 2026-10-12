@@ -33,9 +33,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 每 3.5 秒自動同步一次，讓「模擬器叫車 ➔ 調度中心跳出 ➔ 司機端接單」實現跨分頁即時聯動！
   setInterval(loadAllData, 3500);
 
-  // 初始化直客預約表單、行李防呆與隧道監控
+  // 初始化直客預約表單、行李防呆、地址自動聯想與隧道監控
   initBookingDate();
   onLuggageOrPaxChanged();
+  initLocationAutocomplete();
   checkTunnelStatus();
   setInterval(checkTunnelStatus, 8000);
 });
@@ -339,13 +340,20 @@ async function fetchDrivers() {
       `).join('');
     }
 
-    // 2. 司機端身分選單 (若尚未初始化)
+    // 2. 司機端身分選單 (動態刷新最新司機名單)
     const select = document.getElementById('driverSelect');
-    if (select && select.children.length === 0 && cachedDrivers.length > 0) {
+    if (select && cachedDrivers.length > 0) {
+      const prevVal = select.value || currentDriverId;
       select.innerHTML = cachedDrivers.map(d => `
         <option value="${d.id}">${escapeHtml(d.name)} - ${escapeHtml(d.license_plate)}</option>
       `).join('');
-      currentDriverId = cachedDrivers[0].id;
+      if (prevVal && cachedDrivers.some(d => d.id == prevVal)) {
+        select.value = prevVal;
+        currentDriverId = parseInt(prevVal);
+      } else {
+        select.value = cachedDrivers[0].id;
+        currentDriverId = cachedDrivers[0].id;
+      }
     }
   } catch (err) {
     console.error('載入司機名單失敗:', err);
@@ -449,10 +457,18 @@ async function submitNewDriver(e) {
       body: JSON.stringify({ name, phone, vehicle_model, license_plate, vehicle_type, is_active: true })
     });
     if (res.ok) {
+      const created = await res.json();
       closeAddDriverModal();
       document.getElementById('addDriverForm').reset();
-      fetchDrivers();
+      await fetchDrivers();
       fetchStats();
+      if (created && created.id) {
+        currentDriverId = created.id;
+        const sel = document.getElementById('driverSelect');
+        if (sel) sel.value = created.id;
+        if (typeof renderDriverProfile === 'function') renderDriverProfile();
+        if (typeof renderDriverTrips === 'function') renderDriverTrips();
+      }
     } else {
       alert('新增司機失敗。');
     }
@@ -1058,12 +1074,21 @@ async function checkLineSettingsStatus() {
     if (!res.ok) return;
     const data = await res.json();
     const badge = document.getElementById('lineLiveStatusBadge');
-    if (!badge) return;
+    if (badge) {
+      if (data.is_configured) {
+        badge.innerHTML = `<span class="text-emerald-400 font-bold flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>🟢 機器人已成功連線啟用</span>`;
+      } else {
+        badge.innerHTML = `<span class="text-amber-400 font-medium">⚪ 尚未填入 LINE 金鑰</span>`;
+      }
+    }
 
-    if (data.is_configured) {
-      badge.innerHTML = `<span class="text-emerald-400 font-bold flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>🟢 機器人已成功連線啟用</span>`;
-    } else {
-      badge.innerHTML = `<span class="text-amber-400 font-medium">⚪ 尚未填入 LINE 金鑰</span>`;
+    const gmapBadge = document.getElementById('gmapLiveStatusBadge');
+    if (gmapBadge) {
+      if (data.has_google_maps_key) {
+        gmapBadge.innerHTML = `<span class="text-emerald-400 font-bold flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>🟢 Google Maps API 已啟用 (${escapeHtml(data.google_maps_key_masked)})</span>`;
+      } else {
+        gmapBadge.innerHTML = `<span class="text-amber-400 font-medium">⚪ 未設定金鑰 (使用北台灣地標庫)</span>`;
+      }
     }
   } catch (err) {
     console.error(err);
@@ -1090,6 +1115,30 @@ async function saveLineCredentials(e) {
     });
     if (res.ok) {
       alert('🎉 恭喜！LINE 官方專車機器人金鑰儲存成功，即時調度服務已就緒！');
+      checkLineSettingsStatus();
+    } else {
+      alert('儲存失敗，請檢查格式。');
+    }
+  } catch (err) {
+    alert('網路連線失敗。');
+  }
+}
+
+async function saveGoogleMapsKey(e) {
+  e.preventDefault();
+  const key = document.getElementById('cfgGoogleMapsKey').value.trim();
+  if (!key) {
+    alert('請填寫 Google Maps Platform API Key！');
+    return;
+  }
+  try {
+    const res = await fetch('/api/settings/google-maps-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ google_maps_api_key: key })
+    });
+    if (res.ok) {
+      alert('🎉 恭喜！Google Maps Platform Places API 金鑰儲存成功，全台地址即時自動聯想已啟用！');
       checkLineSettingsStatus();
     } else {
       alert('儲存失敗，請檢查格式。');
@@ -1165,6 +1214,170 @@ function setBookTripType(type) {
 function fillBookLocation(loc) {
   const input = document.getElementById('bookLocation');
   if (input) input.value = loc;
+  const dropdown = document.getElementById('locationSuggestionsDropdown');
+  if (dropdown) dropdown.classList.add('hidden');
+}
+
+// ==========================================
+// 8.1 Google Maps Platform Places Autocomplete (New)
+// Source: Google Maps Platform Code Assist
+// ==========================================
+
+let placesSessionToken = null;
+let autocompleteDebounceTimer = null;
+let currentAutocompleteIndex = -1;
+let currentPredictions = [];
+
+function getOrCreatePlacesSessionToken() {
+  if (!placesSessionToken) {
+    placesSessionToken = 'gmp_session_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+  }
+  return placesSessionToken;
+}
+
+function resetPlacesSessionToken() {
+  placesSessionToken = null;
+}
+
+function initLocationAutocomplete() {
+  const input = document.getElementById('bookLocation');
+  const dropdown = document.getElementById('locationSuggestionsDropdown');
+  const loader = document.getElementById('bookLocationLoading');
+  if (!input || !dropdown) return;
+
+  input.addEventListener('input', (e) => {
+    const query = e.target.value.trim();
+    clearTimeout(autocompleteDebounceTimer);
+    currentAutocompleteIndex = -1;
+
+    if (query.length < 1) {
+      dropdown.classList.add('hidden');
+      dropdown.innerHTML = '';
+      if (loader) loader.classList.add('hidden');
+      return;
+    }
+
+    if (loader) loader.classList.remove('hidden');
+
+    autocompleteDebounceTimer = setTimeout(async () => {
+      try {
+        const sessionToken = getOrCreatePlacesSessionToken();
+        const res = await fetch(`/api/places/autocomplete?input=${encodeURIComponent(query)}&session_token=${encodeURIComponent(sessionToken)}`);
+        if (!res.ok) throw new Error('API 回應異常');
+        const data = await res.json();
+        currentPredictions = data.predictions || [];
+        renderLocationSuggestions(currentPredictions, data.source);
+      } catch (err) {
+        console.error('地址自動完成查詢失敗:', err);
+        dropdown.classList.add('hidden');
+      } finally {
+        if (loader) loader.classList.add('hidden');
+      }
+    }, 220);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (dropdown.classList.contains('hidden') || currentPredictions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      currentAutocompleteIndex = (currentAutocompleteIndex + 1) % currentPredictions.length;
+      updateAutocompleteActiveItem();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      currentAutocompleteIndex = (currentAutocompleteIndex - 1 + currentPredictions.length) % currentPredictions.length;
+      updateAutocompleteActiveItem();
+    } else if (e.key === 'Enter') {
+      if (currentAutocompleteIndex >= 0 && currentAutocompleteIndex < currentPredictions.length) {
+        e.preventDefault();
+        selectLocationSuggestion(currentPredictions[currentAutocompleteIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      dropdown.classList.add('hidden');
+    }
+  });
+
+  // 點選畫面外部時關閉下拉選單
+  document.addEventListener('click', (e) => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+      dropdown.classList.add('hidden');
+    }
+  });
+}
+
+function renderLocationSuggestions(predictions, source) {
+  const dropdown = document.getElementById('locationSuggestionsDropdown');
+  if (!dropdown) return;
+
+  if (!predictions || predictions.length === 0) {
+    dropdown.innerHTML = `
+      <div class="p-3 text-center text-xs text-slate-400">
+        <i class="fa-solid fa-map-pin text-slate-500 mb-1 block"></i>
+        查無完全相符之地標，您可以直接完整輸入門牌地址。
+      </div>
+    `;
+    dropdown.classList.remove('hidden');
+    return;
+  }
+
+  const isGoogle = (source === 'google_maps_places');
+  const badgeHtml = isGoogle
+    ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800 font-mono">Google Maps</span>`
+    : `<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono">精選地標</span>`;
+
+  let html = predictions.map((item, index) => `
+    <div id="autocomplete-item-${index}" onclick="selectLocationSuggestionByIndex(${index})" class="p-2.5 hover:bg-slate-800/80 cursor-pointer flex items-start gap-2.5 transition">
+      <i class="fa-solid fa-location-dot text-rose-400 mt-1 text-xs flex-shrink-0"></i>
+      <div class="flex-1 min-w-0">
+        <div class="text-xs font-bold text-white truncate">${escapeHtml(item.main_text)}</div>
+        ${item.secondary_text ? `<div class="text-[11px] text-slate-400 truncate mt-0.5">${escapeHtml(item.secondary_text)}</div>` : ''}
+      </div>
+      ${badgeHtml}
+    </div>
+  `).join('');
+
+  html += `
+    <div class="px-3 py-1.5 bg-slate-950/90 text-[10px] text-slate-500 flex items-center justify-between border-t border-slate-800">
+      <span class="flex items-center gap-1">
+        <i class="fa-solid fa-bolt text-amber-400"></i>
+        <span>Powered by Google Maps Platform</span>
+      </span>
+      <span class="text-[9px] text-slate-500">方向鍵選擇 • Enter 填入</span>
+    </div>
+  `;
+
+  dropdown.innerHTML = html;
+  dropdown.classList.remove('hidden');
+}
+
+function updateAutocompleteActiveItem() {
+  const items = document.querySelectorAll('#locationSuggestionsDropdown [id^="autocomplete-item-"]');
+  items.forEach((el, idx) => {
+    if (idx === currentAutocompleteIndex) {
+      el.classList.add('bg-slate-800', 'border-l-2', 'border-sky-400');
+      el.scrollIntoView({ block: 'nearest' });
+    } else {
+      el.classList.remove('bg-slate-800', 'border-l-2', 'border-sky-400');
+    }
+  });
+}
+
+function selectLocationSuggestionByIndex(index) {
+  if (currentPredictions[index]) {
+    selectLocationSuggestion(currentPredictions[index]);
+  }
+}
+
+function selectLocationSuggestion(item) {
+  const input = document.getElementById('bookLocation');
+  const dropdown = document.getElementById('locationSuggestionsDropdown');
+  if (input) {
+    input.value = item.full_text || `${item.main_text} (${item.secondary_text || ''})`.trim();
+  }
+  if (dropdown) {
+    dropdown.classList.add('hidden');
+  }
+  resetPlacesSessionToken();
 }
 
 function adjustLuggageCount(type, delta) {

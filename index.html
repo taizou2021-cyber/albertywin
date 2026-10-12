@@ -220,7 +220,12 @@
           </div>
 
           <div class="text-right">
-            <label class="block text-[10px] text-slate-400 mb-0.5">切換目前駕駛：</label>
+            <div class="flex items-center justify-end gap-2 mb-0.5">
+              <label class="block text-[10px] text-slate-400">切換目前駕駛：</label>
+              <button type="button" onclick="openAddDriverModal()" class="text-[10px] text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-0.5">
+                <i class="fa-solid fa-plus text-[9px]"></i> 新增司機
+              </button>
+            </div>
             <select id="driverSelect" onchange="onDriverChanged()" class="bg-slate-950 border border-slate-700 text-xs rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-sky-500 font-medium">
               <!-- JS 動態填入 -->
             </select>
@@ -445,18 +450,29 @@
             <div>
               <div class="flex items-center justify-between mb-1.5">
                 <label class="text-slate-300 font-semibold" id="bookLocationLabel">3. 台北市區接送地址：</label>
-                <span class="text-[10px] text-slate-400">大台北各大飯店/社區門口皆可接送</span>
+                <span class="text-[10px] text-sky-400 font-medium flex items-center gap-1">
+                  <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
+                  <span>支援地址即時自動聯想補全</span>
+                </span>
               </div>
-              <input type="text" id="bookLocation" required placeholder="例如：台北晶華酒店大門口、信義路五段100號" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-sky-500">
+              <div class="relative">
+                <input type="text" id="bookLocation" autocomplete="off" required placeholder="輸入關鍵字 (如：晶華、101、信義路、板橋)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-sky-500 pr-9">
+                <div id="bookLocationLoading" class="hidden absolute right-3 top-3 text-sky-400 text-xs">
+                  <i class="fa-solid fa-spinner fa-spin"></i>
+                </div>
+                <!-- Autocomplete Dropdown List -->
+                <div id="locationSuggestionsDropdown" class="hidden absolute left-0 right-0 top-full mt-1.5 bg-slate-900 border border-sky-500/40 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-slate-800/80 max-h-64 overflow-y-auto">
+                </div>
+              </div>
               
               <!-- 快捷地點標籤 -->
               <div class="flex flex-wrap gap-1.5 mt-2">
-                <button type="button" onclick="fillBookLocation('台北晶華酒店大門口')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">晶華酒店</button>
-                <button type="button" onclick="fillBookLocation('君悅酒店正門 Lobby')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">君悅酒店</button>
-                <button type="button" onclick="fillBookLocation('台北萬豪酒店門口')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">萬豪酒店</button>
-                <button type="button" onclick="fillBookLocation('台北車站東三門')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">台北車站</button>
-                <button type="button" onclick="fillBookLocation('信義區象山社區')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">信義區豪宅</button>
-                <button type="button" onclick="fillBookLocation('板橋新板特區')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">板橋特區</button>
+                <button type="button" onclick="fillBookLocation('台北晶華酒店大門口 (台北市中山區中山北路二段39巷3號)')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">晶華酒店</button>
+                <button type="button" onclick="fillBookLocation('君悅酒店正門 Lobby (台北市信義區松壽路2號)')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">君悅酒店</button>
+                <button type="button" onclick="fillBookLocation('台北萬豪酒店門口 (台北市中山區樂群二路199號)')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">萬豪酒店</button>
+                <button type="button" onclick="fillBookLocation('台北車站東三門 (台北市中正區北平西路3號)')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">台北車站</button>
+                <button type="button" onclick="fillBookLocation('信義區象山社區 (台北市信義區信義路五段松仁路口)')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">信義區豪宅</button>
+                <button type="button" onclick="fillBookLocation('板橋新板特區 (新北市板橋區縣民大道二段7號)')" class="px-2 py-1 rounded-lg bg-slate-950 text-[10px] text-slate-400 border border-slate-800 hover:text-sky-300">板橋特區</button>
               </div>
             </div>
 
@@ -904,6 +920,31 @@
                 儲存金鑰並啟用即時連線
               </button>
             </form>
+          </div>
+
+          <div class="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-3 md:col-span-2">
+            <div class="flex items-center justify-between">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300">地圖功能增強 (選填)</span>
+              <span id="gmapLiveStatusBadge" class="text-[10px] font-semibold text-slate-400">檢查狀態中...</span>
+            </div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-map-location-dot text-amber-400"></i>
+              <span>Google Maps Platform Places API (New) 地址自動聯想</span>
+            </h3>
+            <p class="text-slate-400 text-xs">啟用後，顧客在預約頁面輸入關鍵字或門牌巷弄時，即可享受全台灣地點即時自動聯想補全：</p>
+            <form onsubmit="saveGoogleMapsKey(event)" class="flex flex-col sm:flex-row gap-2">
+              <input type="text" id="cfgGoogleMapsKey" placeholder="貼上 Google Maps Platform API Key (AIzaSy...)" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500">
+              <button type="submit" class="px-5 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-xs font-semibold text-white shadow transition whitespace-nowrap">
+                儲存 Google Maps 金鑰
+              </button>
+            </form>
+            <div class="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1">
+              <span>💡 未設定金鑰時，系統亦內建北台灣各大飯店、高鐵站、捷運轉運點高頻備用庫。</span>
+              <a href="https://mapsplatform.google.com/maps-demo-key?utm_campaign=gmp_git_agentskills_v1" target="_blank" class="text-amber-400 hover:underline flex items-center gap-1">
+                <span>申請免費 Maps Demo Key</span>
+                <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+              </a>
+            </div>
           </div>
 
         </div>
