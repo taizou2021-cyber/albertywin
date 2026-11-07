@@ -79,19 +79,31 @@ async def serve_unified_app():
 
 @app.get("/driver")
 async def redirect_driver():
-    return RedirectResponse(url="/?tab=driver")
+    return RedirectResponse(url="/?role=driver")
 
 @app.get("/simulator")
 async def redirect_simulator():
-    return RedirectResponse(url="/?tab=simulator")
+    return RedirectResponse(url="/?role=admin&tab=simulator")
 
 @app.get("/guide")
 async def redirect_guide():
-    return RedirectResponse(url="/?tab=guide")
+    return RedirectResponse(url="/?role=admin&tab=guide")
 
 @app.get("/book")
 async def redirect_book():
-    return RedirectResponse(url="/?tab=book")
+    return RedirectResponse(url="/?role=customer")
+
+@app.get("/admin")
+async def redirect_admin():
+    return RedirectResponse(url="/?role=admin")
+
+@app.get("/owner")
+async def redirect_owner():
+    return RedirectResponse(url="/?role=admin")
+
+@app.get("/boss")
+async def redirect_boss():
+    return RedirectResponse(url="/?role=admin")
 
 # --- Cloudflare Public Tunnel API ---
 from tunnel_manager import tunnel_mgr

@@ -20,11 +20,24 @@ const SCENARIOS = {
   help: "/help"
 };
 
+let currentAppRole = null; // 'customer' | 'driver' | 'admin'
+
 document.addEventListener('DOMContentLoaded', async () => {
-  // 檢查網址參數是否指定開啟特定分頁 (?tab=driver 或 #simulator)
+  // 檢查網址參數是否指定開啟特定身分或分頁 (?role=customer / ?role=driver / ?tab=...)
   const urlParams = new URLSearchParams(window.location.search);
-  const tabParam = urlParams.get('tab') || window.location.hash.replace('#', '') || 'dispatch';
-  switchTab(tabParam);
+  const roleParam = urlParams.get('role');
+  const tabParam = urlParams.get('tab') || window.location.hash.replace('#', '');
+
+  if (roleParam === 'customer' || tabParam === 'book') {
+    selectAppRole('customer');
+  } else if (roleParam === 'driver' || tabParam === 'driver') {
+    selectAppRole('driver');
+  } else if (['admin', 'owner', 'boss'].includes(roleParam) || ['dispatch', 'simulator', 'guide'].includes(tabParam)) {
+    selectAppRole('admin', tabParam || 'dispatch');
+  } else {
+    // 預設打開首頁時，顯示 Uber 風格 3 層身分選擇入口 (乘客 / 司機 / 車隊老闆)
+    openRoleGateway();
+  }
 
   // 初始化各模組資料
   await loadAllData();
@@ -43,10 +56,76 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ==========================================
-// 1. 三合一主分頁切換邏輯
+// 1. Uber 風格身分分離與分頁切換邏輯
 // ==========================================
 
-function switchTab(tabName) {
+function openRoleGateway() {
+  const gateway = document.getElementById('roleGatewayScreen');
+  if (gateway) gateway.classList.remove('hidden');
+}
+
+function selectAppRole(role, adminInitialTab = 'dispatch') {
+  currentAppRole = role;
+  const gateway = document.getElementById('roleGatewayScreen');
+  if (gateway) gateway.classList.add('hidden');
+
+  const adminNav = document.getElementById('adminNavBar');
+  const headerTitle = document.getElementById('headerAppTitle');
+  const headerBadge = document.getElementById('headerRoleBadge');
+
+  if (role === 'customer') {
+    // 乘客獨立模式：隱藏後台與司機導覽列，只顯示預約畫面
+    if (adminNav) adminNav.classList.add('hidden');
+    if (headerTitle) headerTitle.innerText = '台北機場專車・乘客線上預約';
+    if (headerBadge) {
+      headerBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30';
+      headerBadge.innerHTML = '<i class="fa-solid fa-suitcase-rolling mr-1.5"></i>乘客預約模式';
+    }
+    switchTab('book', false);
+    if (history.replaceState) history.replaceState(null, null, '?role=customer');
+  } else if (role === 'driver') {
+    // 司機獨立模式：隱藏後台與顧客預約列，只顯示司機接單駕駛台
+    if (adminNav) adminNav.classList.add('hidden');
+    if (headerTitle) headerTitle.innerText = '台北機場專車・司機接單駕駛台';
+    if (headerBadge) {
+      headerBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      headerBadge.innerHTML = '<i class="fa-solid fa-car-side mr-1.5"></i>司機接單模式';
+    }
+    switchTab('driver', false);
+    if (history.replaceState) history.replaceState(null, null, '?role=driver');
+  } else {
+    // 車隊老闆 / 總管理員模式 (Level 3)：顯示完整 5 大後台管理分頁與平台營收
+    if (adminNav) adminNav.classList.remove('hidden');
+    if (headerTitle) headerTitle.innerText = '台北機場專車・車隊老闆總控中心';
+    if (headerBadge) {
+      headerBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40';
+      headerBadge.innerHTML = '<i class="fa-solid fa-crown text-amber-400 mr-1.5"></i>LEVEL 3 老闆總控模式';
+    }
+    switchTab(adminInitialTab || 'dispatch', false);
+    if (history.replaceState) history.replaceState(null, null, `?role=admin&tab=${adminInitialTab || 'dispatch'}`);
+  }
+}
+
+function copyRoleLink(roleType) {
+  const origin = window.location.origin || 'https://albertywin.vercel.app';
+  let path = '/book';
+  let label = '乘客預約專屬網址';
+  if (roleType === 'driver') {
+    path = '/driver';
+    label = '司機接單專屬網址';
+  } else if (roleType === 'owner') {
+    path = '/owner';
+    label = '車隊老闆總控專屬網址';
+  }
+  const fullUrl = `${origin}${path}`;
+  navigator.clipboard.writeText(fullUrl).then(() => {
+    showToast(`✅ 已複製【${label}】：${fullUrl}`);
+  }).catch(() => {
+    prompt(`請手動複製【${label}】：`, fullUrl);
+  });
+}
+
+function switchTab(tabName, updateUrl = true) {
   const validTabs = ['dispatch', 'driver', 'book', 'simulator', 'guide'];
   if (!validTabs.includes(tabName)) {
     tabName = 'dispatch';
@@ -72,9 +151,11 @@ function switchTab(tabName) {
     targetNav.classList.add('bg-sky-600', 'text-white', 'font-semibold', 'shadow');
   }
 
-  // 同步更新網址 hash，方便使用者儲存書籤
-  if (history.replaceState) {
-    history.replaceState(null, null, `#${tabName}`);
+  // 若在管理員模式下切換分頁，更新網址
+  if (updateUrl && history.replaceState) {
+    if (currentAppRole === 'admin') {
+      history.replaceState(null, null, `?role=admin&tab=${tabName}`);
+    }
   }
 }
 
@@ -128,6 +209,16 @@ async function fetchTripsAndSyncDriver() {
       filteredTrips = allTrips.filter(t => t.status === currentFilter);
     }
     renderDispatchTrips(filteredTrips);
+
+    // 1.5 計算車隊老闆 (Level 3 App Owner) 平台抽成收益與總流水 GMV
+    const validTrips = allTrips.filter(t => t.status !== 'CANCELLED');
+    const ownerFeePerTrip = 50;
+    const ownerRevenue = validTrips.length * ownerFeePerTrip;
+    const totalGmv = validTrips.reduce((sum, t) => sum + (typeof estimateTripFare === 'function' ? estimateTripFare(t) : 1200), 0);
+    const revEl = document.getElementById('statOwnerRevenue');
+    const gmvEl = document.getElementById('statOwnerGMV');
+    if (revEl) revEl.innerText = `NT$ ${ownerRevenue.toLocaleString()}`;
+    if (gmvEl) gmvEl.innerText = `NT$ ${totalGmv.toLocaleString()}`;
 
     // 2. 同步渲染司機接單端
     renderDriverPortal(allTrips);
