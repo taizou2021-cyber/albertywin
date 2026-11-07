@@ -51,9 +51,33 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 if not STATIC_DIR.exists():
     STATIC_DIR = Path(__file__).resolve().parent
 
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
+
+@app.get("/app.js")
+@app.get("/static/app.js")
+async def serve_app_js():
+    return FileResponse(
+        STATIC_DIR / "app.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache, must-revalidate"}
+    )
+
+@app.get("/driver.js")
+@app.get("/static/driver.js")
+async def serve_driver_js():
+    return FileResponse(STATIC_DIR / "driver.js", media_type="application/javascript")
+
+@app.get("/simulator.js")
+@app.get("/static/simulator.js")
+async def serve_simulator_js():
+    return FileResponse(STATIC_DIR / "simulator.js", media_type="application/javascript")
+
+@app.get("/bot_avatar.jpg")
+@app.get("/static/bot_avatar.jpg")
+async def serve_bot_avatar():
+    return FileResponse(STATIC_DIR / "bot_avatar.jpg", media_type="image/jpeg")
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # --- Health Check Endpoint ---
 @app.get("/health")

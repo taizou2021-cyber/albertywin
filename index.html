@@ -1350,6 +1350,72 @@
     </div>
   </div>
 
-  <script src="/static/app.js"></script>
+  <!-- 內嵌即時回應腳本：確保 3 層身分按鈕零延遲秒開 -->
+  <script>
+    window.currentAppRole = null;
+    window.openRoleGateway = function() {
+      var gateway = document.getElementById('roleGatewayScreen');
+      if (gateway) gateway.classList.remove('hidden');
+    };
+    window.switchTab = function(tabName, updateUrl) {
+      if (updateUrl === undefined) updateUrl = true;
+      var validTabs = ['dispatch', 'driver', 'book', 'simulator', 'guide'];
+      if (validTabs.indexOf(tabName) === -1) tabName = 'dispatch';
+      document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
+      document.querySelectorAll('.tab-btn').forEach(function(btn) {
+        btn.classList.remove('bg-sky-600', 'text-white', 'font-semibold', 'shadow');
+        btn.classList.add('text-slate-400');
+      });
+      var targetContent = document.getElementById('tab-' + tabName);
+      var targetNav = document.getElementById('nav-' + tabName);
+      if (targetContent) targetContent.classList.add('active');
+      if (targetNav) {
+        targetNav.classList.remove('text-slate-400');
+        targetNav.classList.add('bg-sky-600', 'text-white', 'font-semibold', 'shadow');
+      }
+      if (updateUrl && history.replaceState && window.currentAppRole === 'admin') {
+        history.replaceState(null, null, '?role=admin&tab=' + tabName);
+      }
+    };
+    window.selectAppRole = function(role, adminInitialTab) {
+      if (!adminInitialTab) adminInitialTab = 'dispatch';
+      window.currentAppRole = role;
+      var gateway = document.getElementById('roleGatewayScreen');
+      if (gateway) gateway.classList.add('hidden');
+      var adminNav = document.getElementById('adminNavBar');
+      var headerTitle = document.getElementById('headerAppTitle');
+      var headerBadge = document.getElementById('headerRoleBadge');
+      if (role === 'customer') {
+        if (adminNav) adminNav.classList.add('hidden');
+        if (headerTitle) headerTitle.innerText = '台北機場專車・乘客線上預約';
+        if (headerBadge) {
+          headerBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30';
+          headerBadge.innerHTML = '<i class="fa-solid fa-suitcase-rolling mr-1.5"></i>LEVEL 1 乘客預約模式';
+        }
+        window.switchTab('book', false);
+        if (history.replaceState) history.replaceState(null, null, '?role=customer');
+      } else if (role === 'driver') {
+        if (adminNav) adminNav.classList.add('hidden');
+        if (headerTitle) headerTitle.innerText = '台北機場專車・司機接單駕駛台';
+        if (headerBadge) {
+          headerBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+          headerBadge.innerHTML = '<i class="fa-solid fa-car-side mr-1.5"></i>LEVEL 2 司機接單模式';
+        }
+        window.switchTab('driver', false);
+        if (history.replaceState) history.replaceState(null, null, '?role=driver');
+      } else {
+        if (adminNav) adminNav.classList.remove('hidden');
+        if (headerTitle) headerTitle.innerText = '台北機場專車・車隊老闆總控中心';
+        if (headerBadge) {
+          headerBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40';
+          headerBadge.innerHTML = '<i class="fa-solid fa-crown text-amber-400 mr-1.5"></i>LEVEL 3 老闆總控模式';
+        }
+        window.switchTab(adminInitialTab || 'dispatch', false);
+        if (history.replaceState) history.replaceState(null, null, '?role=admin&tab=' + (adminInitialTab || 'dispatch'));
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+  </script>
+  <script src="/static/app.js?v=20261107v3"></script>
 </body>
 </html>
