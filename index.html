@@ -149,6 +149,22 @@
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     };
+    window.enterBy4DCode = function(codeStr) {
+      var code = String(codeStr || '').trim();
+      if (!code) {
+        var inp = document.getElementById('quick4DCodeInput');
+        if (inp) code = inp.value.trim();
+      }
+      if (code === '1688') {
+        window.selectAppRole('customer');
+      } else if (code === '5568') {
+        window.selectAppRole('driver');
+      } else if (code === '8888') {
+        window.selectAppRole('driver', 'boss');
+      } else {
+        alert('🔢 請輸入正確的 4 位數通行簡碼：\n• 1688：乘客預約叫車\n• 5568：司機上線接單\n• 8888：車隊老闆總控台');
+      }
+    };
   </script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans">
@@ -244,10 +260,31 @@
 
       </div>
 
+      <!-- 🔢 4位數通行簡碼 (4D Code) 快速輸入列 (免記網址) -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 font-black text-sm flex-shrink-0">
+            4D
+          </div>
+          <div>
+            <h3 class="text-xs sm:text-sm font-black text-white">🔢 4 位數快速通行簡碼（免記網址・輸入 4 碼直達）</h3>
+            <p class="text-[11px] text-slate-400">
+              乘客叫車碼 <strong class="text-amber-300 font-mono">1688</strong> ｜ 司機接單碼 <strong class="text-emerald-300 font-mono">5568</strong> ｜ 車隊老闆碼 <strong class="text-purple-300 font-mono">8888</strong>
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+          <input type="text" id="quick4DCodeInput" maxlength="4" inputmode="numeric" placeholder="輸入4碼 (如1688)" onkeydown="if(event.key==='Enter') window.enterBy4DCode(this.value)" class="w-36 bg-slate-950 border border-slate-700 focus:border-sky-500 rounded-xl px-3 py-2 text-center text-sm font-mono font-black tracking-widest text-amber-300 focus:outline-none">
+          <button type="button" onclick="window.enterBy4DCode()" class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-black text-xs transition flex-shrink-0">
+            立即進入
+          </button>
+        </div>
+      </div>
+
       <!-- 底部說明列 -->
       <div class="pt-2 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
         <span>專營：大台北 ⇄ 桃園機場 / 松山機場 24H 專車車隊</span>
-        <span class="text-slate-400">💡 專屬直達網址：客人叫車 <code class="text-amber-300">/book</code> ｜ 司機與老闆 <code class="text-emerald-300">/driver</code></span>
+        <span class="text-slate-400">💡 免記網址！支援 <strong class="text-sky-300">QR Code 掃碼</strong> 與 <strong class="text-amber-300">4 位數簡碼 (1688 / 5568 / 8888)</strong></span>
       </div>
     </div>
   </div>
@@ -540,24 +577,36 @@
               </div>
             </div>
 
-            <!-- 2. 老闆專屬：分流網址一鍵複製 (給客人 vs 給司機) -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-              <div class="bg-slate-950/80 border border-amber-500/30 rounded-xl p-3 flex items-center justify-between gap-2">
-                <div class="truncate">
-                  <span class="text-[10px] font-bold text-amber-400 block">① 傳給【乘客叫車】專屬網址</span>
-                  <code class="text-slate-200 font-mono text-[11px]">https://albertywin.vercel.app/book</code>
+            <!-- 2. 老闆專屬：QR Code 掃碼卡 & 4位數通行簡碼 (取代傳統網址) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div class="bg-slate-950/90 border border-amber-500/40 rounded-xl p-3 flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Falbertywin.vercel.app%2Fbook" alt="乘客叫車 QR Code" class="w-16 h-16 rounded-lg bg-white p-1 flex-shrink-0 shadow">
+                  <div class="space-y-1">
+                    <span class="text-[11px] font-black text-amber-400 block">① 給【乘客叫車】掃碼或4碼</span>
+                    <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-xs font-black">
+                      <span>4位簡碼：1688</span>
+                    </div>
+                    <p class="text-[10px] text-slate-400">手機掃描左圖 QR Code 直接叫車</p>
+                  </div>
                 </div>
-                <button type="button" onclick="copyRoleLink('customer')" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] flex-shrink-0 transition">
-                  複製乘客網址
+                <button type="button" onclick="copyRoleLink('customer')" class="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] flex-shrink-0 transition">
+                  複製分享
                 </button>
               </div>
-              <div class="bg-slate-950/80 border border-emerald-500/30 rounded-xl p-3 flex items-center justify-between gap-2">
-                <div class="truncate">
-                  <span class="text-[10px] font-bold text-emerald-400 block">② 傳給【司機接單 & 老闆】專屬網址</span>
-                  <code class="text-slate-200 font-mono text-[11px]">https://albertywin.vercel.app/driver</code>
+              <div class="bg-slate-950/90 border border-emerald-500/40 rounded-xl p-3 flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Falbertywin.vercel.app%2Fdriver" alt="司機接單 QR Code" class="w-16 h-16 rounded-lg bg-white p-1 flex-shrink-0 shadow">
+                  <div class="space-y-1">
+                    <span class="text-[11px] font-black text-emerald-400 block">② 給【司機 & 老闆】掃碼或4碼</span>
+                    <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-black">
+                      <span>司機 5568 / 老闆 8888</span>
+                    </div>
+                    <p class="text-[10px] text-slate-400">手機掃描左圖 QR Code 直接上線</p>
+                  </div>
                 </div>
-                <button type="button" onclick="copyRoleLink('driver')" class="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[11px] flex-shrink-0 transition">
-                  複製司機網址
+                <button type="button" onclick="copyRoleLink('driver')" class="px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[11px] flex-shrink-0 transition">
+                  複製分享
                 </button>
               </div>
             </div>
@@ -768,23 +817,26 @@
           </div>
         </div>
 
-        <!-- 社群推廣與直客連結分享盒 (方便用戶貼在 FB / IG / 蝦皮) -->
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-2 text-xs">
-          <div class="flex items-center justify-between">
-            <span class="font-bold text-slate-300 flex items-center gap-1.5">
-              <i class="fa-solid fa-share-nodes text-sky-400"></i>
-              <span>社群專用「直客極速預約網址」（可貼在 FB、IG、蝦皮、Threads）：</span>
-            </span>
+        <!-- 📱 專屬掃碼 QR Code 與 🔢 4位數叫車簡碼盒 (取代傳統長網址與隧道提示) -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+          <div class="flex items-center gap-3.5">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=https%3A%2F%2Falbertywin.vercel.app%2Fbook" alt="機場專車預約 QR Code" class="w-16 h-16 rounded-xl bg-white p-1.5 shadow-lg flex-shrink-0">
+            <div class="space-y-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-black text-white text-xs sm:text-sm">📲 分享給親友叫車（免記網址！）</span>
+                <span class="px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 font-mono font-black text-xs">叫車 4 碼：1688</span>
+              </div>
+              <p class="text-[11px] text-slate-300">請親友打開手機相機或 LINE 掃描左側 QR Code，或輸入 4 位數簡碼 <strong class="text-amber-300 font-mono">1688</strong> 即可直接預約專車！</p>
+              <input type="hidden" id="publicBookingLinkInput" value="https://albertywin.vercel.app/book">
+            </div>
           </div>
 
-          <div class="flex items-center space-x-2">
-            <input type="text" id="publicBookingLinkInput" readonly value="http://127.0.0.1:8000/book" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-sky-300 select-all">
-            <button type="button" onclick="copyBookingLink()" class="px-3 py-2 bg-sky-600 hover:bg-sky-500 rounded-xl text-xs font-bold text-white transition flex items-center gap-1">
-              <i class="fa-regular fa-copy"></i>
-              <span>複製</span>
+          <div class="flex items-center gap-2 w-full sm:w-auto justify-end flex-shrink-0">
+            <button type="button" onclick="copyBookingLink()" class="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 rounded-xl text-xs font-bold text-white transition flex items-center gap-1.5 shadow">
+              <i class="fa-solid fa-share-nodes"></i>
+              <span>一鍵分享給好友</span>
             </button>
           </div>
-          <p class="text-[11px] text-slate-400">💡 提示：開啟下方「真機串接與隧道」後，此處將自動替換為全球皆可開啟的公開 HTTPS 網址！</p>
         </div>
 
         <!-- 顧客線上預約表單 -->

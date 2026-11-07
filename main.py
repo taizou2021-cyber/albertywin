@@ -129,8 +129,17 @@ async def redirect_owner():
     return RedirectResponse(url="/?role=driver&boss=1")
 
 @app.get("/boss")
+@app.get("/8888")
 async def redirect_boss():
     return RedirectResponse(url="/?role=driver&boss=1")
+
+@app.get("/1688")
+async def redirect_1688():
+    return RedirectResponse(url="/?role=customer")
+
+@app.get("/5568")
+async def redirect_5568():
+    return RedirectResponse(url="/?role=driver")
 
 # --- Cloudflare Public Tunnel API ---
 from tunnel_manager import tunnel_mgr
