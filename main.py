@@ -99,7 +99,10 @@ def download_vercel_zip():
 
 @app.get("/", response_class=FileResponse)
 async def serve_unified_app():
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(
+        STATIC_DIR / "index.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
+    )
 
 @app.get("/driver")
 async def redirect_driver():
@@ -119,15 +122,15 @@ async def redirect_book():
 
 @app.get("/admin")
 async def redirect_admin():
-    return RedirectResponse(url="/?role=admin")
+    return RedirectResponse(url="/?role=driver&boss=1")
 
 @app.get("/owner")
 async def redirect_owner():
-    return RedirectResponse(url="/?role=admin")
+    return RedirectResponse(url="/?role=driver&boss=1")
 
 @app.get("/boss")
 async def redirect_boss():
-    return RedirectResponse(url="/?role=admin")
+    return RedirectResponse(url="/?role=driver&boss=1")
 
 # --- Cloudflare Public Tunnel API ---
 from tunnel_manager import tunnel_mgr

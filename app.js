@@ -26,16 +26,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 檢查網址參數是否指定開啟特定身分或分頁 (?role=customer / ?role=driver / ?tab=...)
   const urlParams = new URLSearchParams(window.location.search);
   const roleParam = urlParams.get('role');
+  const bossParam = urlParams.get('boss');
   const tabParam = urlParams.get('tab') || window.location.hash.replace('#', '');
 
   if (roleParam === 'customer' || tabParam === 'book') {
     selectAppRole('customer');
   } else if (roleParam === 'driver' || tabParam === 'driver') {
-    selectAppRole('driver');
+    selectAppRole('driver', bossParam === '1' ? 'boss' : '');
   } else if (['admin', 'owner', 'boss'].includes(roleParam) || ['dispatch', 'simulator', 'guide'].includes(tabParam)) {
-    selectAppRole('admin', tabParam || 'dispatch');
+    selectAppRole('admin', tabParam || 'driver');
   } else {
-    // 預設打開首頁時，顯示 Uber 風格 3 層身分選擇入口 (乘客 / 司機 / 車隊老闆)
+    // 預設打開首頁時，顯示 Uber 風格雙主軸入口 (乘客 / 司機&車隊老闆)
     openRoleGateway();
   }
 
@@ -61,13 +62,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function openRoleGateway() {
   const gateway = document.getElementById('roleGatewayScreen');
-  if (gateway) gateway.classList.remove('hidden');
+  if (gateway) {
+    gateway.classList.remove('hidden');
+    gateway.style.display = 'flex';
+  }
 }
 
-function selectAppRole(role, adminInitialTab = 'dispatch') {
+function selectAppRole(role, adminInitialTab = '') {
   currentAppRole = role;
+  window.currentAppRole = role;
   const gateway = document.getElementById('roleGatewayScreen');
-  if (gateway) gateway.classList.add('hidden');
+  if (gateway) {
+    gateway.classList.add('hidden');
+    gateway.style.display = 'none';
+  }
 
   const adminNav = document.getElementById('adminNavBar');
   const headerTitle = document.getElementById('headerAppTitle');
@@ -75,7 +83,10 @@ function selectAppRole(role, adminInitialTab = 'dispatch') {
 
   if (role === 'customer') {
     // 乘客獨立模式：隱藏後台與司機導覽列，只顯示預約畫面
-    if (adminNav) adminNav.classList.add('hidden');
+    if (adminNav) {
+      adminNav.classList.add('hidden');
+      adminNav.style.display = 'none';
+    }
     if (headerTitle) headerTitle.innerText = '台北機場專車・乘客線上預約';
     if (headerBadge) {
       headerBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30';
@@ -84,25 +95,37 @@ function selectAppRole(role, adminInitialTab = 'dispatch') {
     switchTab('book', false);
     if (history.replaceState) history.replaceState(null, null, '?role=customer');
   } else if (role === 'driver') {
-    // 司機獨立模式：隱藏後台與顧客預約列，只顯示司機接單駕駛台
-    if (adminNav) adminNav.classList.add('hidden');
-    if (headerTitle) headerTitle.innerText = '台北機場專車・司機接單駕駛台';
+    // 司機與車隊老闆整合面板：顯示司機接單駕駛台，內嵌車隊老闆總控台 (Boss Panel)
+    if (adminNav) {
+      adminNav.classList.add('hidden');
+      adminNav.style.display = 'none';
+    }
+    if (headerTitle) headerTitle.innerText = '台北機場專車・司機與車隊總控台';
     if (headerBadge) {
       headerBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
-      headerBadge.innerHTML = '<i class="fa-solid fa-car-side mr-1.5"></i>司機接單模式';
+      headerBadge.innerHTML = '<i class="fa-solid fa-car-side mr-1.5"></i>司機 & 老闆面板';
     }
     switchTab('driver', false);
-    if (history.replaceState) history.replaceState(null, null, '?role=driver');
+    if (adminInitialTab === 'boss' && typeof window.toggleBossSubPanel === 'function') {
+      window.toggleBossSubPanel(true);
+    }
+    if (history.replaceState) history.replaceState(null, null, adminInitialTab === 'boss' ? '?role=driver&boss=1' : '?role=driver');
   } else {
-    // 車隊老闆 / 總管理員模式 (Level 3)：顯示完整 5 大後台管理分頁與平台營收
-    if (adminNav) adminNav.classList.remove('hidden');
+    // 車隊老闆總控模式：展開司機面板內的 Boss Panel 並顯示頂部完整導航列
+    if (adminNav) {
+      adminNav.classList.remove('hidden');
+      adminNav.style.display = 'flex';
+    }
     if (headerTitle) headerTitle.innerText = '台北機場專車・車隊老闆總控中心';
     if (headerBadge) {
       headerBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40';
-      headerBadge.innerHTML = '<i class="fa-solid fa-crown text-amber-400 mr-1.5"></i>LEVEL 3 老闆總控模式';
+      headerBadge.innerHTML = '<i class="fa-solid fa-crown text-amber-400 mr-1.5"></i>老闆總控模式';
     }
-    switchTab(adminInitialTab || 'dispatch', false);
-    if (history.replaceState) history.replaceState(null, null, `?role=admin&tab=${adminInitialTab || 'dispatch'}`);
+    switchTab(adminInitialTab || 'driver', false);
+    if (typeof window.toggleBossSubPanel === 'function') {
+      window.toggleBossSubPanel(true);
+    }
+    if (history.replaceState) history.replaceState(null, null, `?role=driver&boss=1`);
   }
 }
 
@@ -184,6 +207,13 @@ async function fetchStats() {
     document.getElementById('statGroups').innerText = data.total_groups;
     document.getElementById('statDrivers').innerText = data.active_drivers;
 
+    const bossTotal = document.getElementById('bossStatTotal');
+    const bossNew = document.getElementById('bossStatNew');
+    const bossDrivers = document.getElementById('bossStatDrivers');
+    if (bossTotal) bossTotal.innerText = data.total_trips;
+    if (bossNew) bossNew.innerText = data.new_trips;
+    if (bossDrivers) bossDrivers.innerText = data.active_drivers;
+
     // 若有待接單行程，在頂部「司機手機接單」分頁按鈕顯示醒目標記
     const navBadge = document.getElementById('navDriverBadge');
     if (data.new_trips > 0) {
@@ -210,15 +240,19 @@ async function fetchTripsAndSyncDriver() {
     }
     renderDispatchTrips(filteredTrips);
 
-    // 1.5 計算車隊老闆 (Level 3 App Owner) 平台抽成收益與總流水 GMV
+    // 1.5 計算車隊老闆 (App Owner / Boss Panel) 平台抽成收益與總流水 GMV
     const validTrips = allTrips.filter(t => t.status !== 'CANCELLED');
     const ownerFeePerTrip = 50;
     const ownerRevenue = validTrips.length * ownerFeePerTrip;
     const totalGmv = validTrips.reduce((sum, t) => sum + (typeof estimateTripFare === 'function' ? estimateTripFare(t) : 1200), 0);
     const revEl = document.getElementById('statOwnerRevenue');
     const gmvEl = document.getElementById('statOwnerGMV');
+    const bossRevEl = document.getElementById('bossStatRevenue');
+    const bossGmvEl = document.getElementById('bossStatGMV');
     if (revEl) revEl.innerText = `NT$ ${ownerRevenue.toLocaleString()}`;
     if (gmvEl) gmvEl.innerText = `NT$ ${totalGmv.toLocaleString()}`;
+    if (bossRevEl) bossRevEl.innerText = `NT$ ${ownerRevenue.toLocaleString()}`;
+    if (bossGmvEl) bossGmvEl.innerText = `NT$ ${totalGmv.toLocaleString()}`;
 
     // 2. 同步渲染司機接單端
     renderDriverPortal(allTrips);
