@@ -44,7 +44,8 @@ NON_AIRPORT_DESTINATIONS = [
 BOOKING_INTENT_KEYWORDS = [
     "/airport", "/book", "#airport", "送機", "預約送機", "叫車", "要車", "找車",
     "機場專車", "需要車", "去機場", "接送", "前往機場", "需要專車",
-    "need car", "book car", "airport transfer", "car to airport"
+    "need car", "book car", "airport transfer", "car to airport",
+    "go to airport", "going to airport", "to airport", "to the airport"
 ]
 
 def parse_num_chinese(val_str: str) -> int:
@@ -161,26 +162,50 @@ def parse_booking_message(text: str, sender_name: Optional[str] = "貴賓客戶"
             customer_name=sender_name
         )
 
-    # 3. 提取上車地點 (台北地區常見特徵)
+    # 3. 提取上車地點 (台北地區常見特徵 + 英文 address / sec / alley 支援)
     pickup_location = structured_data.get("pickup_location")
     if not pickup_location:
-        # 正則比對「從...」、「於...接送」、「上車地點：...」、「接送地點：...」
-        loc_match = re.search(r'(?:從|接送地點|上車處|上車地點|接送處|地點|地址|於|在)\s*[:：\s]?\s*([^\n,，。]{3,40})', raw_text)
-        if loc_match:
-            candidate = loc_match.group(1).strip()
-            # 排除含有機場字眼的誤配
-            if not any(k in candidate for k in ["機場", "桃機", "松機", "航廈"]):
+        # 優先比對明確的「地址 / address / 上車地點」關鍵字（允許英文地址內含逗號，如 xxx rd, 14 section 3 alley #3）
+        addr_explicit = re.search(
+            r'(?:接送地點|上車處|上車地點|接送處|地址|address|pickup(?:\s+at)?)\s*[:：\s]?\s*([^\n。；;]{3,70})',
+            raw_text,
+            re.IGNORECASE
+        )
+        if addr_explicit:
+            candidate = addr_explicit.group(1).strip().rstrip(',，. ')
+            # 截斷後方的電話或人數關鍵字
+            candidate = re.split(r'\s+(?:tel|phone|電話|手機|人數|\d+\s*(?:人|位|pax))', candidate, flags=re.IGNORECASE)[0].strip().rstrip(',，')
+            if not any(k in candidate.lower() for k in ["機場", "桃機", "松機", "航廈", "airport"]):
                 pickup_location = candidate
 
     if not pickup_location:
-        # 自動探測台北常見行政區或飯店大樓
-        taipei_areas = re.search(r'((?:台北市|新北市)?(?:信義區|大安區|中山區|松山區|中正區|萬華區|內湖區|南港區|士林區|北投區|文山區|板橋區|新店區|中和區|永和區|三重區|汐止區)?[^\n,，。]{2,25}(?:飯店|酒店|大廈|大樓|社區|會館|豪宅|路|街|巷|門口|Lobby|一樓))', raw_text)
+        # 正則比對「從...」、「於...接送」、「地點：...」
+        loc_match = re.search(r'(?:從|地點|於|在|from)\s*[:：\s]?\s*([^\n,，。]{3,40})', raw_text, re.IGNORECASE)
+        if loc_match:
+            candidate = loc_match.group(1).strip()
+            # 排除含有機場字眼的誤配
+            if not any(k in candidate.lower() for k in ["機場", "桃機", "松機", "航廈", "airport"]):
+                pickup_location = candidate
+
+    if not pickup_location:
+        # 自動探測台北常見行政區或飯店大樓或中英文路名巷弄 (如 xxx路三段14巷3號 或 xxx rd, 14 section 3 alley #3)
+        taipei_areas = re.search(
+            r'((?:台北市|新北市)?(?:信義區|大安區|中山區|松山區|中正區|萬華區|內湖區|南港區|士林區|北投區|文山區|板橋區|新店區|中和區|永和區|三重區|汐止區)?[^\n,，。]{2,30}(?:飯店|酒店|大廈|大樓|社區|會館|豪宅|路[^\n,，。]{0,18}號?|街[^\n,，。]{0,18}號?|巷[^\n,，。]{0,10}號?|門口|Lobby|一樓))',
+            raw_text
+        )
+        en_road = re.search(
+            r'([A-Za-z0-9\s.#,-]{3,45}(?:rd|road|st|street|sec|section|alley|ln|lane)[A-Za-z0-9\s.#,-]{0,30})',
+            raw_text,
+            re.IGNORECASE
+        )
         if taipei_areas:
             pickup_location = taipei_areas.group(1).strip()
+        elif en_road:
+            pickup_location = en_road.group(1).strip().strip(', ')
         else:
             pickup_location = "台北市區 (司機接單後確認詳細地址)"
 
-    # 4. 提取出發日期與時間
+    # 4. 提取出發日期與時間 (支援中英文日期如 11/11、11月11日、Nov 11、November 11)
     pickup_datetime = structured_data.get("pickup_datetime")
     if not pickup_datetime:
         time_match = TIME_PATTERN.search(raw_text)
@@ -188,12 +213,26 @@ def parse_booking_message(text: str, sender_name: Optional[str] = "貴賓客戶"
 
         now = datetime.now()
         date_str = ""
+        month_map = {
+            'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+            'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+        }
+        en_date_match = re.search(
+            r'\b(?:(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?|(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?))\b',
+            raw_text,
+            re.IGNORECASE
+        )
         if "明天" in text_lower or "tomorrow" in text_lower:
             date_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
         elif "後天" in text_lower:
             date_str = (now + timedelta(days=2)).strftime("%Y-%m-%d")
         elif "今天" in text_lower or "today" in text_lower:
             date_str = now.strftime("%Y-%m-%d")
+        elif en_date_match:
+            m_str = (en_date_match.group(1) or en_date_match.group(4))[:3].lower()
+            d_num = int(en_date_match.group(2) or en_date_match.group(3))
+            m_num = month_map.get(m_str, now.month)
+            date_str = f"{now.year}-{m_num:02d}-{d_num:02d} ({m_num}月{d_num}日)"
         else:
             d_match = re.search(r'\b(\d{1,2}[月/-]\d{1,2}(?:日)?)\b', raw_text)
             if d_match:
