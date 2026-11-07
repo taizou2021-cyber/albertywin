@@ -1950,3 +1950,378 @@ function copyWebhookUrl() {
   }
 }
 
+// ==========================================
+// 11. AI 智慧語音辨識叫車 (全單語音自動填表 & 欄位語音輸入)
+// ==========================================
+
+let activeSpeechRec = null;
+let isSmartVoiceListening = false;
+
+function getSpeechRecognitionInstance() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return null;
+  const rec = new SpeechRecognition();
+  rec.lang = 'zh-TW';
+  rec.interimResults = true;
+  rec.continuous = false;
+  return rec;
+}
+
+function toggleSmartVoiceBooking() {
+  const btn = document.getElementById('voiceSmartBookBtn');
+  const icon = document.getElementById('voiceSmartBookIcon');
+  const textSpan = document.getElementById('voiceSmartBookBtnText');
+  const input = document.getElementById('voiceTranscriptInput');
+
+  if (isSmartVoiceListening && activeSpeechRec) {
+    activeSpeechRec.stop();
+    return;
+  }
+
+  const rec = getSpeechRecognitionInstance();
+  if (!rec) {
+    alert('您的瀏覽器目前不支援原生麥克風語音辨識（建議使用 Chrome / Safari / Edge），已為您載入語音範例體驗！');
+    runDemoVoiceBooking();
+    return;
+  }
+
+  activeSpeechRec = rec;
+  isSmartVoiceListening = true;
+
+  if (btn) btn.className = 'px-4 py-2.5 rounded-xl bg-rose-600 animate-pulse text-white font-black text-xs flex items-center gap-2 shadow-lg transition';
+  if (icon) icon.className = 'fa-solid fa-circle-stop text-sm';
+  if (textSpan) textSpan.innerText = '正在聆聽中... (說完請點擊停止)';
+  if (input) {
+    input.value = '';
+    input.placeholder = '🎙️ 請開始說話，例如：明天早上六點半從台北晶華酒店去桃園機場第二航廈，3個人2件大行李，電話0912345678...';
+  }
+
+  let finalTranscript = '';
+
+  rec.onresult = (event) => {
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const t = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        finalTranscript += t;
+      } else {
+        interim += t;
+      }
+    }
+    if (input) input.value = finalTranscript || interim;
+  };
+
+  rec.onend = () => {
+    isSmartVoiceListening = false;
+    if (btn) btn.className = 'px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-rose-600/20 transition active:scale-95';
+    if (icon) icon.className = 'fa-solid fa-microphone text-sm';
+    if (textSpan) textSpan.innerText = '點擊開始語音說出需求';
+    if (input && input.value.trim()) {
+      parseVoiceTextAndFillForm(input.value.trim());
+    }
+  };
+
+  rec.onerror = (event) => {
+    console.warn('Speech recognition error:', event.error);
+    isSmartVoiceListening = false;
+    if (btn) btn.className = 'px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-rose-600/20 transition active:scale-95';
+    if (icon) icon.className = 'fa-solid fa-microphone text-sm';
+    if (textSpan) textSpan.innerText = '點擊開始語音說出需求';
+  };
+
+  rec.start();
+}
+
+function runDemoVoiceBooking() {
+  const samples = [
+    '明天早上六點半，從台北晶華酒店大門口去桃園機場第二航廈，3位大人、2個28吋大行李箱、1個登機箱，搭長榮 BR87，電話 0912-345-678，我是林先生，需要一張安全座椅',
+    '後天下午兩點半，從信義區台北101去松山機場國際線，2個人、2件大行李、1組高爾夫球具，班機 JL098，電話 0933-882-910，我姓陳',
+    '明天上午八點三十分返台接機，從桃園機場第一航廈回板橋新板特區，4個人、3個大行李箱，航班 JX801，電話 0955-771-320，我是王小姐'
+  ];
+  const chosen = samples[Math.floor(Math.random() * samples.length)];
+  const input = document.getElementById('voiceTranscriptInput');
+  if (input) input.value = chosen;
+  parseVoiceTextAndFillForm(chosen);
+}
+
+function chineseNumToInt(str) {
+  if (!str) return null;
+  const map = { '零': 0, '一': 1, '一個': 1, '二': 2, '兩': 2, '兩個': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
+  if (/^\d+$/.test(str)) return parseInt(str, 10);
+  if (map[str] !== undefined) return map[str];
+  return null;
+}
+
+function parseVoiceTextAndFillForm(rawText) {
+  if (!rawText || !rawText.trim()) return;
+  const text = rawText.trim();
+  const recognizedFields = [];
+
+  // 1. 送機 vs 接機
+  if (/接機|抵達|返台|回台北|回新北|回板橋|機場出發/.test(text)) {
+    setBookTripType('ARRIVAL');
+    recognizedFields.push('服務類型：返台接機');
+  } else {
+    setBookTripType('DEPARTURE');
+    recognizedFields.push('服務類型：台北送機');
+  }
+
+  // 2. 機場與航廈
+  const airportSelect = document.getElementById('bookAirport');
+  if (airportSelect) {
+    if (/松山.*國內/.test(text)) {
+      airportSelect.value = '台北松山機場 (TSA) 國內線';
+      recognizedFields.push('機場：松山國內線');
+    } else if (/松山|松機|TSA/i.test(text)) {
+      airportSelect.value = '台北松山機場 (TSA) 國際線';
+      recognizedFields.push('機場：松山國際線');
+    } else if (/一航|第一航廈|1航|T1/i.test(text)) {
+      airportSelect.value = '桃園國際機場 (TPE) 第一航廈';
+      recognizedFields.push('機場：桃機一航');
+    } else if (/桃機|桃園|二航|第二航廈|2航|T2|TPE/i.test(text)) {
+      airportSelect.value = '桃園國際機場 (TPE) 第二航廈';
+      recognizedFields.push('機場：桃機二航');
+    }
+  }
+
+  // 3. 日期 (今天 / 明天 / 後天 / YYYY-MM-DD)
+  const dateInput = document.getElementById('bookDate');
+  if (dateInput) {
+    const now = new Date();
+    if (/後天/.test(text)) {
+      now.setDate(now.getDate() + 2);
+      dateInput.value = now.toISOString().split('T')[0];
+      recognizedFields.push('日期：後天');
+    } else if (/明天|明日/.test(text)) {
+      now.setDate(now.getDate() + 1);
+      dateInput.value = now.toISOString().split('T')[0];
+      recognizedFields.push('日期：明天');
+    } else if (/今天|今日/.test(text)) {
+      dateInput.value = now.toISOString().split('T')[0];
+      recognizedFields.push('日期：今天');
+    }
+  }
+
+  // 4. 時間 (例如：早上六點半、下午兩點、06:30、14點30分)
+  const timeInput = document.getElementById('bookTime');
+  if (timeInput) {
+    const colonTime = text.match(/([01]?\d|2[0-3])[:：]([0-5]\d)/);
+    if (colonTime) {
+      const hh = String(colonTime[1]).padStart(2, '0');
+      const mm = String(colonTime[2]).padStart(2, '0');
+      timeInput.value = `${hh}:${mm}`;
+      recognizedFields.push(`時間：${hh}:${mm}`);
+    } else {
+      const zhTime = text.match(/(凌晨|早上|上午|中午|下午|晚上)?\s*([0-9一二兩三四五六七八九十]{1,2})\s*[點時]\s*(半|([0-9一二三四五六七八九十]{1,2})\s*分?)?/);
+      if (zhTime) {
+        const period = zhTime[1] || '';
+        let hour = chineseNumToInt(zhTime[2]);
+        if (hour !== null) {
+          if ((period === '下午' || period === '晚上') && hour < 12) hour += 12;
+          if (period === '中午' && hour < 11) hour += 12;
+          let minute = 0;
+          if (zhTime[3] === '半') minute = 30;
+          else if (zhTime[4]) minute = chineseNumToInt(zhTime[4]) || 0;
+          const hh = String(hour).padStart(2, '0');
+          const mm = String(minute).padStart(2, '0');
+          timeInput.value = `${hh}:${mm}`;
+          recognizedFields.push(`時間：${hh}:${mm}`);
+        }
+      }
+    }
+  }
+
+  // 5. 人數 (例如：3位大人、4個人、三位乘客)
+  const paxMatch = text.match(/([1-8一二兩三四五六七八])\s*(位|個)?\s*(人|大人|乘客|位大人|名乘客)/) || text.match(/([1-8一二兩三四五六七八])\s*位/);
+  const paxSelect = document.getElementById('bookPax');
+  if (paxMatch && paxSelect) {
+    const paxNum = chineseNumToInt(paxMatch[1]);
+    if (paxNum >= 1 && paxNum <= 8) {
+      paxSelect.value = String(paxNum);
+      recognizedFields.push(`人數：${paxNum}人`);
+    }
+  }
+
+  // 6. 行李件數 (大行李 / 登機箱 / 特殊行李)
+  const largeMatch = text.match(/([0-8零一二兩三四五六七八])\s*(件|個|咖)?\s*(28吋|29吋|30吋|32吋|大行李|大箱|托運)/);
+  if (largeMatch) {
+    const lg = chineseNumToInt(largeMatch[1]);
+    if (lg !== null) {
+      document.getElementById('bookLuggageLarge').value = lg;
+      document.getElementById('largeLuggageCount').innerText = lg;
+      recognizedFields.push(`大行李：${lg}件`);
+    }
+  } else {
+    const genericLug = text.match(/([0-8零一二兩三四五六七八])\s*(件|個|咖)\s*行李/);
+    if (genericLug) {
+      const lg = chineseNumToInt(genericLug[1]);
+      if (lg !== null) {
+        document.getElementById('bookLuggageLarge').value = lg;
+        document.getElementById('largeLuggageCount').innerText = lg;
+        recognizedFields.push(`大行李：${lg}件`);
+      }
+    }
+  }
+
+  const smallMatch = text.match(/([0-8零一二兩三四五六七八])\s*(件|個|咖)?\s*(20吋|24吋|小行李|登機箱|小箱|手提箱)/);
+  if (smallMatch) {
+    const sm = chineseNumToInt(smallMatch[1]);
+    if (sm !== null) {
+      document.getElementById('bookLuggageSmall').value = sm;
+      document.getElementById('smallLuggageCount').innerText = sm;
+      recognizedFields.push(`登機箱：${sm}件`);
+    }
+  }
+
+  // 特殊行李勾選
+  const specialMap = [
+    { kw: /高爾夫|球具|球袋/, val: '高爾夫球具' },
+    { kw: /嬰兒推車|推車|娃娃車/, val: '嬰兒推車' },
+    { kw: /輪椅/, val: '摺疊輪椅' },
+    { kw: /紙箱/, val: '大型紙箱' },
+    { kw: /雪板|衝浪板/, val: '雪板/衝浪板' }
+  ];
+  document.querySelectorAll('input[name="specialLuggage"]').forEach(cb => {
+    specialMap.forEach(item => {
+      if (item.val === cb.value && item.kw.test(text)) {
+        cb.checked = true;
+        recognizedFields.push(`特殊行李：${item.val}`);
+      }
+    });
+  });
+
+  // 7. 地址擷取 (從...去/到/往... 或 回...)
+  const locInput = document.getElementById('bookLocation');
+  if (locInput) {
+    let extractedLoc = '';
+    const depLocMatch = text.match(/從\s*([^，,。！!？?\s]{2,25}?)\s*(出發|去|到|前往|往|搭)/);
+    const arrLocMatch = text.match(/(回|送到|前往|到)\s*([^，,。！!？?\s]{2,25}?)(?:[，,。]|$)/);
+    if (depLocMatch && !/機場|航廈/.test(depLocMatch[1])) {
+      extractedLoc = depLocMatch[1];
+    } else if (arrLocMatch && !/機場|航廈/.test(arrLocMatch[2])) {
+      extractedLoc = arrLocMatch[2];
+    } else {
+      const landmarks = ['台北晶華酒店', '君悅酒店', '台北萬豪酒店', '台北車站', '台北101', '板橋新板特區', '信義區', '大安區', '中山區', '內湖區', '松山區', '南港區', '士林區', '天母', '三重', '中和', '永和', '新店'];
+      for (const lm of landmarks) {
+        if (text.includes(lm)) {
+          extractedLoc = lm;
+          break;
+        }
+      }
+    }
+    if (extractedLoc) {
+      locInput.value = extractedLoc;
+      recognizedFields.push(`接送地點：${extractedLoc}`);
+    }
+  }
+
+  // 8. 航班編號 (例如 BR87, CI51, JX800, JL098)
+  const flightMatch = text.match(/\b([A-Z]{2}\s?\d{2,4})\b/i);
+  const flightInput = document.getElementById('bookFlight');
+  if (flightMatch && flightInput) {
+    const fl = flightMatch[1].replace(/\s+/g, '').toUpperCase();
+    flightInput.value = fl;
+    recognizedFields.push(`航班：${fl}`);
+  }
+
+  // 9. 聯絡電話 (09xx-xxx-xxx)
+  const phoneMatch = text.match(/(09\d{2}[-\s]?\d{3}[-\s]?\d{3})/);
+  const phoneInput = document.getElementById('bookPhone');
+  if (phoneMatch && phoneInput) {
+    const rawDigits = phoneMatch[1].replace(/\D/g, '');
+    const formatted = `${rawDigits.slice(0, 4)}-${rawDigits.slice(4, 7)}-${rawDigits.slice(7, 10)}`;
+    phoneInput.value = formatted;
+    recognizedFields.push(`電話：${formatted}`);
+  }
+
+  // 10. 稱呼/姓名 (例如：我姓林、我是陳先生、林小姐)
+  const nameInput = document.getElementById('bookName');
+  if (nameInput) {
+    const surnameMatch = text.match(/我姓([\u4e00-\u9fa5])/);
+    const titleMatch = text.match(/(?:我是|聯絡人|稱呼)?([\u4e00-\u9fa5]{1,2}(?:先生|小姐|女士|太太|老闆|師傅))/);
+    if (titleMatch) {
+      nameInput.value = titleMatch[1];
+      recognizedFields.push(`稱呼：${titleMatch[1]}`);
+    } else if (surnameMatch) {
+      nameInput.value = `${surnameMatch[1]}貴賓`;
+      recognizedFields.push(`稱呼：${surnameMatch[1]}貴賓`);
+    }
+  }
+
+  // 11. 備註 (例如：安全座椅、舉牌)
+  const notesInput = document.getElementById('bookNotes');
+  if (notesInput && /安全座椅|汽座|舉牌|寵物|多停一點/.test(text)) {
+    notesInput.value = text;
+    recognizedFields.push('已填入特殊備註');
+  }
+
+  // 重新計算後車廂防呆與車資
+  onLuggageOrPaxChanged();
+  onBookAirportOrVehicleChanged();
+
+  const statusBox = document.getElementById('voiceParseStatus');
+  if (statusBox) {
+    statusBox.classList.remove('hidden');
+    if (recognizedFields.length > 0) {
+      statusBox.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5"></i><strong>AI 語音辨識自動填單完成！</strong>已自動填入：${recognizedFields.join('、')}`;
+    } else {
+      statusBox.innerHTML = `<i class="fa-solid fa-circle-info mr-1.5"></i>已收到語音文字，請確認下方表單欄位。`;
+    }
+  }
+  showToast('🎙️ AI 語音自動填單完成！請確認下方資料後送出預約。');
+}
+
+function startFieldVoiceInput(inputId, btnId) {
+  const inputEl = document.getElementById(inputId);
+  const btnEl = document.getElementById(btnId);
+  if (!inputEl) return;
+
+  const rec = getSpeechRecognitionInstance();
+  if (!rec) {
+    alert('您的瀏覽器目前不支援麥克風語音輸入（建議使用 Chrome / Safari / Edge）。');
+    return;
+  }
+
+  const origHtml = btnEl ? btnEl.innerHTML : '';
+  if (btnEl) {
+    btnEl.classList.add('animate-pulse', 'bg-rose-600', 'text-white');
+  }
+
+  rec.onresult = (event) => {
+    const transcript = event.results[0][0].transcript.trim().replace(/[。，、！!？?]$/g, '');
+    if (inputId === 'bookPhone') {
+      const digits = transcript.replace(/\D/g, '');
+      if (digits.length === 10 && digits.startsWith('09')) {
+        inputEl.value = `${digits.slice(0, 4)}-${digits.slice(4, 7)}-${digits.slice(7, 10)}`;
+      } else {
+        inputEl.value = transcript;
+      }
+    } else if (inputId === 'bookFlight') {
+      inputEl.value = transcript.replace(/\s+/g, '').toUpperCase();
+    } else {
+      inputEl.value = transcript;
+    }
+    // 若為地址欄位，自動觸發 Google Maps 地址聯想選單
+    if (inputId === 'bookLocation') {
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  };
+
+  rec.onend = () => {
+    if (btnEl) {
+      btnEl.classList.remove('animate-pulse', 'bg-rose-600', 'text-white');
+      btnEl.innerHTML = origHtml;
+    }
+  };
+
+  rec.onerror = () => {
+    if (btnEl) {
+      btnEl.classList.remove('animate-pulse', 'bg-rose-600', 'text-white');
+      btnEl.innerHTML = origHtml;
+    }
+  };
+
+  rec.start();
+}
+
+

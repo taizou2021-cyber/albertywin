@@ -813,6 +813,48 @@
               </div>
               <span class="text-emerald-400 text-base"><i class="fa-brands fa-line text-lg"></i></span>
             </div>
+
+            <!-- 🎙️ AI 智慧語音一鍵叫車（免打字・開口說自動填單） -->
+            <div class="bg-gradient-to-br from-rose-950/50 via-slate-900 to-sky-950/50 border-2 border-rose-500/40 rounded-2xl p-4 shadow-xl space-y-3">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div class="space-y-0.5">
+                  <div class="flex items-center gap-2">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white flex items-center gap-1">
+                      <i class="fa-solid fa-microphone-lines"></i> AI 語音辨識叫車
+                    </span>
+                    <h4 class="text-xs sm:text-sm font-black text-white">免打字！直接開口說，自動填好整張預約單</h4>
+                  </div>
+                  <p class="text-[11px] text-slate-300">
+                    範例：「<span class="text-amber-300">明天早上六點半，從台北晶華酒店去桃園機場第二航廈，3個人、2個大行李箱，電話0912345678，我姓林</span>」
+                  </p>
+                </div>
+
+                <div class="flex items-center gap-2 flex-shrink-0">
+                  <button type="button" id="voiceSmartBookBtn" onclick="toggleSmartVoiceBooking()" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-rose-600/20 transition active:scale-95">
+                    <i id="voiceSmartBookIcon" class="fa-solid fa-microphone text-sm"></i>
+                    <span id="voiceSmartBookBtnText">點擊開始語音說出需求</span>
+                  </button>
+                  <button type="button" onclick="runDemoVoiceBooking()" class="px-2.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-bold transition" title="一鍵試聽並體驗語音自動填單">
+                    試用範例
+                  </button>
+                </div>
+              </div>
+
+              <!-- 語音即時辨識字幕與手動微調區 -->
+              <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <div class="relative flex-1">
+                    <input type="text" id="voiceTranscriptInput" placeholder="點擊上方麥克風開始說話，語音辨識文字會即時顯示於此（也可直接貼上文字自動填表）..." class="w-full bg-slate-950/90 border border-slate-700 focus:border-rose-400 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none">
+                  </div>
+                  <button type="button" onclick="parseVoiceTextAndFillForm(document.getElementById('voiceTranscriptInput').value)" class="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1 flex-shrink-0 transition">
+                    <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i>
+                    <span>智慧填入</span>
+                  </button>
+                </div>
+                <div id="voiceParseStatus" class="hidden text-[11px] px-3 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-medium"></div>
+              </div>
+            </div>
+
             <div>
               <label class="block text-slate-300 font-semibold mb-1.5">1. 選擇專車服務類型：</label>
               <div class="grid grid-cols-2 gap-2">
@@ -848,10 +890,14 @@
                 </span>
               </div>
               <div class="relative">
-                <input type="text" id="bookLocation" autocomplete="off" required placeholder="輸入關鍵字 (如：晶華、101、信義路、板橋)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-sky-500 pr-9">
-                <div id="bookLocationLoading" class="hidden absolute right-3 top-3 text-sky-400 text-xs">
+                <input type="text" id="bookLocation" autocomplete="off" required placeholder="輸入或點擊右側麥克風說出地址 (如：晶華、101、信義路、板橋)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-sky-500 pr-20">
+                <div id="bookLocationLoading" class="hidden absolute right-11 top-3 text-sky-400 text-xs">
                   <i class="fa-solid fa-spinner fa-spin"></i>
                 </div>
+                <button type="button" id="micBtnLocation" onclick="startFieldVoiceInput('bookLocation', 'micBtnLocation')" class="absolute right-2 top-1.5 px-2.5 py-1 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/40 text-xs transition flex items-center gap-1" title="語音說出接送地址">
+                  <i class="fa-solid fa-microphone"></i>
+                  <span class="text-[10px] font-bold">語音</span>
+                </button>
                 <!-- Autocomplete Dropdown List -->
                 <div id="locationSuggestionsDropdown" class="hidden absolute left-0 right-0 top-full mt-1.5 bg-slate-900 border border-sky-500/40 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-slate-800/80 max-h-64 overflow-y-auto">
                 </div>
@@ -1033,22 +1079,42 @@
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label class="block text-slate-300 font-semibold mb-1.5">航班編號 (選填)：</label>
-                <input type="text" id="bookFlight" placeholder="如：BR87、CI51" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 font-mono">
+                <div class="relative">
+                  <input type="text" id="bookFlight" placeholder="如：BR87、CI51" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 pr-9 text-xs text-white focus:outline-none focus:border-sky-500 font-mono">
+                  <button type="button" id="micBtnFlight" onclick="startFieldVoiceInput('bookFlight', 'micBtnFlight')" class="absolute right-2 top-1.5 w-6 h-6 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white flex items-center justify-center transition" title="語音輸入航班編號">
+                    <i class="fa-solid fa-microphone text-[11px]"></i>
+                  </button>
+                </div>
               </div>
               <div>
                 <label class="block text-slate-300 font-semibold mb-1.5">乘車人稱呼 / 姓名：</label>
-                <input type="text" id="bookName" required placeholder="例如：林先生 / 陳小姐" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500">
+                <div class="relative">
+                  <input type="text" id="bookName" required placeholder="例如：林先生 / 陳小姐" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 pr-9 text-xs text-white focus:outline-none focus:border-sky-500">
+                  <button type="button" id="micBtnName" onclick="startFieldVoiceInput('bookName', 'micBtnName')" class="absolute right-2 top-1.5 w-6 h-6 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white flex items-center justify-center transition" title="語音輸入稱呼">
+                    <i class="fa-solid fa-microphone text-[11px]"></i>
+                  </button>
+                </div>
               </div>
               <div>
                 <label class="block text-slate-300 font-semibold mb-1.5">聯絡手機：</label>
-                <input type="tel" id="bookPhone" required placeholder="0912-345-678" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 font-mono">
+                <div class="relative">
+                  <input type="tel" id="bookPhone" required placeholder="0912-345-678" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 pr-9 text-xs text-white focus:outline-none focus:border-sky-500 font-mono">
+                  <button type="button" id="micBtnPhone" onclick="startFieldVoiceInput('bookPhone', 'micBtnPhone')" class="absolute right-2 top-1.5 w-6 h-6 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white flex items-center justify-center transition" title="語音輸入手機號碼">
+                    <i class="fa-solid fa-microphone text-[11px]"></i>
+                  </button>
+                </div>
               </div>
             </div>
 
             <!-- 8. 特殊備註 -->
             <div>
               <label class="block text-slate-300 font-semibold mb-1">特殊需求備註 (選填)：</label>
-              <input type="text" id="bookNotes" placeholder="例如：需 1 張安全座椅、行李箱較大、舉牌接機等" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500">
+              <div class="relative">
+                <input type="text" id="bookNotes" placeholder="例如：需 1 張安全座椅、行李箱較大、舉牌接機等" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 pr-9 text-xs text-white focus:outline-none focus:border-sky-500">
+                <button type="button" id="micBtnNotes" onclick="startFieldVoiceInput('bookNotes', 'micBtnNotes')" class="absolute right-2 top-1.5 w-6 h-6 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white flex items-center justify-center transition" title="語音輸入備註">
+                  <i class="fa-solid fa-microphone text-[11px]"></i>
+                </button>
+              </div>
             </div>
 
             <!-- 費用總計與提交 -->
@@ -1545,6 +1611,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=20261107v4"></script>
+  <script src="/static/app.js?v=20261107v5"></script>
 </body>
 </html>
