@@ -91,11 +91,11 @@ async def process_incoming_message(
         if reply_token:
             await send_line_reply(reply_token, [registered_flex])
             
-        # 2. 自動秒級推播至【車隊司機搶單大群】，讓待命司機一鍵搶單！
+        # 2. 自動秒級推播至【車隊司機搶單大群】及所有已連線之真實 LINE 群組，讓待命司機與老闆同步收到！
         try:
-            from line_handler import build_driver_broadcast_flex
+            from line_handler import build_driver_broadcast_flex, broadcast_to_all_real_line_groups
             driver_broadcast_flex = build_driver_broadcast_flex(trip)
-            await send_line_push_to_group("tw-group-driver-fleet", [driver_broadcast_flex])
+            await broadcast_to_all_real_line_groups([driver_broadcast_flex], exclude_group_id=group_id)
             # 也記錄至司機群對話紀錄中
             database.log_message(
                 "tw-group-driver-fleet", "系統廣播派單", "bot-system",
@@ -124,10 +124,12 @@ async def assign_driver_and_notify_group(trip_id: int, driver_id: int, bundle_ma
     if not updated_trip:
         return None
         
-    # 推送司機資訊卡片至乘客發起叫車的 LINE 群組
+    # 推送司機資訊卡片至乘客發起叫車的 LINE 群組，並同步通知所有真實 LINE 群組（老闆群、司機群）
+    from line_handler import broadcast_to_all_real_line_groups
     assigned_flex = build_driver_assigned_flex(updated_trip)
     group_id = updated_trip["line_group_id"]
     await send_line_push_to_group(group_id, [assigned_flex])
+    await broadcast_to_all_real_line_groups([assigned_flex], exclude_group_id=group_id)
     
     logger.info("已為單號 #%s 派定司機 %s (是否雙向連環單: %s)，並推播通知至群組 %s", trip_id, driver_id, bundle_matched, group_id)
     return updated_trip

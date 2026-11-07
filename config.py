@@ -14,7 +14,7 @@ LINE_LIFF_ID = os.getenv("LINE_LIFF_ID", "")
 
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
-BASE_URL = os.getenv("BASE_URL", f"http://localhost:{PORT}")
+BASE_URL = os.getenv("BASE_URL", "https://albertywin.vercel.app")
 
 # 嚴格限定目的地機場 (台灣台北地區主力機場)
 DEFAULT_AIRPORTS = [

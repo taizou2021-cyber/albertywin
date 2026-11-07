@@ -543,7 +543,7 @@ def build_driver_broadcast_flex(trip: Dict[str, Any]) -> Dict[str, Any]:
                         "action": {
                             "type": "uri",
                             "label": "⚡ 點此開啟司機端秒殺搶單",
-                            "uri": f"{BASE_URL}/?tab=driver"
+                            "uri": f"{BASE_URL}/driver"
                         },
                         "style": "primary",
                         "color": "#16a34a"
@@ -581,6 +581,10 @@ async def send_line_push_to_group(group_id: str, messages: List[Dict[str, Any]])
         logger.info("[模擬推播] 推送至群組 %s: %s 則訊息", group_id, len(messages))
         return True
 
+    if group_id.startswith("tw-group-") or group_id in ["web-direct-booking", "direct-chat"]:
+        logger.info("[內部模擬群組] 略過真實 LINE API 呼叫 (%s)", group_id)
+        return True
+
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"
@@ -596,3 +600,22 @@ async def send_line_push_to_group(group_id: str, messages: List[Dict[str, Any]])
         except Exception as e:
             logger.error("發送 LINE Push 失敗: %s", e)
             return False
+
+
+async def broadcast_to_all_real_line_groups(messages: List[Dict[str, Any]], exclude_group_id: Optional[str] = None) -> int:
+    """
+    將新訂單或派車結果自動推播至所有機器人已加入的真實 LINE 群組（老闆群、司機群）。
+    """
+    import database
+    groups = database.get_groups()
+    sent_count = 0
+    for g in groups:
+        gid = g.get("group_id", "")
+        if not gid or gid == exclude_group_id:
+            continue
+        if gid.startswith("tw-group-") or gid in ["web-direct-booking", "direct-chat"]:
+            continue
+        ok = await send_line_push_to_group(gid, messages)
+        if ok:
+            sent_count += 1
+    return sent_count

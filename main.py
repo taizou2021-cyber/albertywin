@@ -232,11 +232,11 @@ async def create_manual_trip(trip: TripCreate, background_tasks: BackgroundTasks
     trip_id = database.create_trip(data)
     created = database.get_trip(trip_id)
     
-    # 秒級推播至【車隊司機即時搶單大群】
+    # 秒級推播至【車隊司機即時搶單大群】及所有已綁定之真實 LINE 群組（老闆群、司機群）
     try:
-        from line_handler import build_driver_broadcast_flex, send_line_push_to_group
+        from line_handler import build_driver_broadcast_flex, broadcast_to_all_real_line_groups
         flex = build_driver_broadcast_flex(created)
-        background_tasks.add_task(send_line_push_to_group, "tw-group-driver-fleet", [flex])
+        background_tasks.add_task(broadcast_to_all_real_line_groups, [flex])
         lug_info = created.get("luggage_breakdown") or f"{created.get('luggage', 1)}件行李"
         database.log_message(
             "tw-group-driver-fleet", "顧客線上預約廣播", "bot-system",
