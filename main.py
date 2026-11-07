@@ -292,6 +292,84 @@ def add_driver(driver: DriverCreate):
     driver_id = database.create_driver(driver.model_dump())
     return database.get_driver(driver_id)
 
+@app.post("/api/drivers/{driver_id}/toggle-active")
+def toggle_driver_active_status(driver_id: int):
+    updated = database.toggle_driver_active(driver_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    return updated
+
+# --- Boss Authority: Dispatch Mode, All-Group Broadcast & Alliance Sub-Dispatch ---
+
+BOSS_RUNTIME_CONFIG = {
+    "dispatch_mode": "AUTO_WITH_OVERRIDE"  # "OWNER_ONLY" | "AUTO_WITH_OVERRIDE"
+}
+
+class BossDispatchModeRequest(BaseModel):
+    dispatch_mode: str
+
+class BossBroadcastRequest(BaseModel):
+    message: str
+    target_group_id: Optional[str] = "ALL"
+
+@app.get("/api/boss/dispatch-mode")
+def get_boss_dispatch_mode():
+    return BOSS_RUNTIME_CONFIG
+
+@app.post("/api/boss/dispatch-mode")
+def set_boss_dispatch_mode(req: BossDispatchModeRequest):
+    mode = req.dispatch_mode if req.dispatch_mode in ["OWNER_ONLY", "AUTO_WITH_OVERRIDE"] else "AUTO_WITH_OVERRIDE"
+    BOSS_RUNTIME_CONFIG["dispatch_mode"] = mode
+    return BOSS_RUNTIME_CONFIG
+
+@app.post("/api/boss/broadcast")
+async def boss_broadcast_to_groups(req: BossBroadcastRequest, background_tasks: BackgroundTasks):
+    msg_text = (req.message or "").strip()
+    if not msg_text:
+        raise HTTPException(status_code=400, detail="廣播訊息不可為空")
+    groups = database.get_groups()
+    target = req.target_group_id or "ALL"
+    sent_groups = []
+    for g in groups:
+        gid = g["group_id"]
+        if target != "ALL" and gid != target:
+            continue
+        database.log_message(gid, "👑 車隊老闆總部廣播", "boss-owner", f"【👑 總部調度公告】{msg_text}", is_booking=False)
+        sent_groups.append(g["group_name"])
+
+    # 同步推播至真實 LINE 群組
+    from line_handler import broadcast_to_all_real_line_groups, send_line_push_to_group
+    line_msg = [{
+        "type": "text",
+        "text": f"👑【台北機場專車・老闆總部廣播】\n{msg_text}\n\n👉 司機接單台：https://albertywin.vercel.app/5568"
+    }]
+    if target == "ALL":
+        background_tasks.add_task(broadcast_to_all_real_line_groups, line_msg)
+    else:
+        background_tasks.add_task(send_line_push_to_group, target, line_msg)
+
+    return {"status": "ok", "groups_count": len(sent_groups), "groups": sent_groups}
+
+@app.post("/api/boss/subdispatch/{trip_id}")
+async def boss_subdispatch_trip(trip_id: int, background_tasks: BackgroundTasks):
+    trip = database.get_trip(trip_id)
+    if not trip:
+        raise HTTPException(status_code=404, detail="找不到該筆行程")
+    from line_handler import build_driver_broadcast_flex, broadcast_to_all_real_line_groups
+    flex = build_driver_broadcast_flex(trip)
+    background_tasks.add_task(broadcast_to_all_real_line_groups, [flex])
+    for gid in ["tw-group-driver-fleet", "tw-group-tpe-terminal-drivers", "tw-group-alphard-van-alliance"]:
+        database.log_message(
+            gid, "👑 老闆跨群急調轉單", "boss-owner",
+            f"【🤝 同業外調支援・單號 #{trip_id}】{trip['pickup_location']} ➔ {trip['destination_airport']} ({trip['pickup_datetime']}) | 車資 NT${int(trip.get('estimated_fare', 1200))} (轉單介紹費 NT$150)",
+            is_booking=True
+        )
+    return {"status": "ok", "trip_id": trip_id}
+
+@app.get("/api/boss/messages")
+def get_boss_all_group_messages(group_id: Optional[str] = Query("ALL"), limit: int = Query(50)):
+    return database.get_recent_messages(group_id=group_id, limit=limit)
+
 # --- Groups & Stats API ---
 
 @app.get("/api/groups")

@@ -189,9 +189,13 @@ function switchTab(tabName, updateUrl = true) {
 async function loadAllData() {
   await Promise.all([
     fetchStats(),
-    fetchTripsAndSyncDriver(),
+    fetchDrivers(),
     fetchGroups(),
-    fetchDrivers()
+    fetchBossDispatchMode()
+  ]);
+  await Promise.all([
+    fetchTripsAndSyncDriver(),
+    fetchBossGroupMessages()
   ]);
 }
 
@@ -254,8 +258,10 @@ async function fetchTripsAndSyncDriver() {
     if (bossRevEl) bossRevEl.innerText = `NT$ ${ownerRevenue.toLocaleString()}`;
     if (bossGmvEl) bossGmvEl.innerText = `NT$ ${totalGmv.toLocaleString()}`;
 
-    // 2. 同步渲染司機接單端
+    // 2. 同步渲染司機接單端與老闆總控派單台
     renderDriverPortal(allTrips);
+    renderBossDirectDispatch(allTrips);
+    renderBossDriverLedger(allTrips);
   } catch (err) {
     console.error('載入行程失敗:', err);
   }
@@ -952,6 +958,10 @@ function renderDriverPortal(allTrips) {
 }
 
 async function acceptTripByDriver(tripId, bundleMatched = false) {
+  if (window.bossDispatchMode === 'OWNER_ONLY') {
+    alert('👑 目前車隊設定為【僅限老闆指派模式 (禁私搶)】！\n請等待車隊老闆於「👑 老闆總控台」拍板決定指派司機。');
+    return;
+  }
   if (!currentDriverId) {
     alert('請先選擇司機身分');
     return;
@@ -2323,5 +2333,339 @@ function startFieldVoiceInput(inputId, btnId) {
 
   rec.start();
 }
+
+// ==========================================
+// 12. 👑 車隊老闆最高權限：派單決定權、全群組訊息總牆、跨群廣播與司機帳本
+// ==========================================
+
+window.bossDispatchMode = 'AUTO_WITH_OVERRIDE';
+let cachedAllDriversIncludeInactive = [];
+
+async function fetchBossDispatchMode() {
+  try {
+    const res = await fetch('/api/boss/dispatch-mode');
+    if (!res.ok) return;
+    const data = await res.json();
+    window.bossDispatchMode = data.dispatch_mode || 'AUTO_WITH_OVERRIDE';
+    updateBossDispatchModeUi();
+  } catch (e) {}
+}
+
+function updateBossDispatchModeUi() {
+  const btnAuto = document.getElementById('modeBtnAuto');
+  const btnOwner = document.getElementById('modeBtnOwner');
+  if (!btnAuto || !btnOwner) return;
+  if (window.bossDispatchMode === 'OWNER_ONLY') {
+    btnOwner.className = 'px-2.5 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-black transition shadow';
+    btnAuto.className = 'px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-white transition';
+  } else {
+    btnAuto.className = 'px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-black transition shadow';
+    btnOwner.className = 'px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-white transition';
+  }
+}
+
+async function setBossDispatchMode(mode) {
+  try {
+    const res = await fetch('/api/boss/dispatch-mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dispatch_mode: mode })
+    });
+    if (res.ok) {
+      window.bossDispatchMode = mode;
+      updateBossDispatchModeUi();
+      const label = mode === 'OWNER_ONLY'
+        ? '👑 已切換為【僅限老闆指派模式】！司機無法自行私搶，全由老闆拍板決定派給誰！'
+        : '⚡ 已切換為【司機自由搶單＋老闆隨時強制改派模式】！';
+      showToast(label);
+    }
+  } catch (e) {}
+}
+
+function renderBossDirectDispatch(allTrips) {
+  const container = document.getElementById('bossDirectDispatchList');
+  if (!container) return;
+
+  const activeOrNew = (allTrips || []).filter(t => t.status !== 'CANCELLED' && t.status !== 'COMPLETED');
+  if (activeOrNew.length === 0) {
+    container.innerHTML = `<div class="p-4 text-center text-xs text-slate-500 bg-slate-900 rounded-xl border border-slate-800">目前尚無待派或進行中之行程</div>`;
+    return;
+  }
+
+  const driverOpts = (cachedDrivers || []).map(d =>
+    `<option value="${d.id}">${escapeHtml(d.name)} (${escapeHtml(d.license_plate)} · ${escapeHtml(d.vehicle_type.split(' ')[0])})</option>`
+  ).join('');
+
+  container.innerHTML = activeOrNew.map(t => {
+    const isNew = t.status === 'NEW';
+    const statusTag = isNew
+      ? `<span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold">⏳ 待老闆派單</span>`
+      : `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">✅ 目前指派：${escapeHtml(t.driver_name || '已派車')} (${escapeHtml(t.driver_plate || '')})</span>`;
+    const btnLabel = isNew ? '👑 拍板指派給他' : '🔄 強制改派給他';
+    const btnColor = isNew ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' : 'bg-purple-600 hover:bg-purple-500 text-white';
+
+    return `
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2 text-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="font-mono font-bold text-sky-400">#${t.id}</span>
+            ${statusTag}
+            <span class="text-[11px] text-slate-400 font-mono">${escapeHtml(t.pickup_datetime)}</span>
+          </div>
+          <span class="font-mono font-black text-emerald-400">車資 NT$ ${Math.round(t.estimated_fare || 1200).toLocaleString()}</span>
+        </div>
+
+        <div class="text-[11px] text-slate-200">
+          <span class="text-sky-300 font-bold">${escapeHtml(t.pickup_location)}</span>
+          <i class="fa-solid fa-arrow-right mx-1.5 text-slate-500"></i>
+          <span class="text-amber-300 font-bold">${escapeHtml(t.destination_airport)}</span>
+          <span class="text-slate-400 ml-2">(${t.passengers}人 | ${escapeHtml(t.luggage_breakdown || t.luggage + '件')} | ${escapeHtml(t.vehicle_type)})</span>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1.5 border-t border-slate-800/80">
+          <div class="flex items-center gap-1.5 flex-1">
+            <select id="bossAssignSelect-${t.id}" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400">
+              ${driverOpts}
+            </select>
+            <button type="button" onclick="bossAssignDriverToTrip(${t.id})" class="px-3 py-1.5 rounded-lg ${btnColor} font-black text-[11px] flex-shrink-0 transition shadow">
+              ${btnLabel}
+            </button>
+          </div>
+          <button type="button" onclick="bossSubdispatchTrip(${t.id})" class="px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-sky-950 text-sky-300 border border-sky-500/40 font-bold text-[11px] flex items-center justify-center gap-1 flex-shrink-0 transition" title="自家司機忙線時，一鍵轉發至所有機場司機 LINE 群組調車並賺取 $150 轉單費">
+            <i class="fa-solid fa-share-from-square"></i>
+            <span>跨群外調轉單 (+$150抽水)</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  activeOrNew.forEach(t => {
+    if (t.driver_id) {
+      const sel = document.getElementById(`bossAssignSelect-${t.id}`);
+      if (sel) sel.value = String(t.driver_id);
+    }
+  });
+}
+
+async function bossAssignDriverToTrip(tripId) {
+  const sel = document.getElementById(`bossAssignSelect-${tripId}`);
+  if (!sel || !sel.value) {
+    alert('請先選擇要指派的司機');
+    return;
+  }
+  const driverId = parseInt(sel.value, 10);
+  try {
+    const res = await fetch(`/api/trips/${tripId}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ driver_id: driverId, bundle_matched_trip: false })
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      showToast(`👑 老闆已拍板將單號 #${tripId} 指派給【${updated.driver_name}】並同步通知 LINE 群組！`);
+      loadAllData();
+    } else {
+      alert('指派失敗，請稍後再試');
+    }
+  } catch (e) {
+    alert('網路連線異常');
+  }
+}
+
+async function bossSubdispatchTrip(tripId) {
+  try {
+    const res = await fetch(`/api/boss/subdispatch/${tripId}`, { method: 'POST' });
+    if (res.ok) {
+      showToast(`🤝 已將單號 #${tripId} 廣播轉發至所有機場司機與同業 LINE 群組調車（含 $150 轉單抽水）！`);
+      fetchBossGroupMessages();
+    }
+  } catch (e) {}
+}
+
+async function fetchBossGroupMessages() {
+  const feedEl = document.getElementById('bossAllMessagesFeed');
+  const filterSelect = document.getElementById('bossMsgGroupFilter');
+  if (!feedEl) return;
+
+  // 同步更新群組下拉選單
+  if (filterSelect && groups && groups.length > 0 && filterSelect.options.length <= 1) {
+    const currentVal = filterSelect.value || 'ALL';
+    filterSelect.innerHTML = `<option value="ALL">📡 顯示全部 LINE 群組訊息 (${groups.length} 個群組)</option>` +
+      groups.map(g => `<option value="${escapeHtml(g.group_id)}">💬 ${escapeHtml(g.group_name)}</option>`).join('');
+    filterSelect.value = currentVal;
+  }
+
+  const gid = filterSelect ? filterSelect.value : 'ALL';
+  try {
+    const res = await fetch(`/api/boss/messages?group_id=${encodeURIComponent(gid)}&limit=40`);
+    if (!res.ok) return;
+    const msgs = await res.json();
+    if (!msgs || msgs.length === 0) {
+      feedEl.innerHTML = `<p class="text-center text-slate-500 py-4">此群組目前尚無對話紀錄</p>`;
+      return;
+    }
+
+    feedEl.innerHTML = msgs.map(m => {
+      const gName = m.group_name || m.group_id || 'LINE 群組';
+      const isBoss = m.sender_id === 'boss-owner';
+      const badgeColor = isBoss
+        ? 'bg-amber-500 text-slate-950'
+        : (m.is_booking ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-sky-500/20 text-sky-300 border border-sky-500/30');
+
+      const quickConvertBtn = (!m.is_booking && !isBoss)
+        ? `<button type="button" onclick='convertGroupMsgToTrip(${JSON.stringify(m.group_id)}, ${JSON.stringify(gName)}, ${JSON.stringify(m.sender_name)}, ${JSON.stringify(m.message_text)})' class="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 text-[10px] font-bold transition flex-shrink-0">⚡ 轉為派車單</button>`
+        : (m.is_booking ? `<span class="text-[10px] text-emerald-400 font-bold flex-shrink-0">✓ 已建單</span>` : '');
+
+      return `
+        <div class="p-2.5 rounded-xl bg-slate-950/90 border border-slate-800/90 flex items-start justify-between gap-2">
+          <div class="space-y-1 min-w-0">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold ${badgeColor}">${escapeHtml(gName)}</span>
+              <strong class="text-white text-[11px]">${escapeHtml(m.sender_name)}</strong>
+              <span class="text-[10px] text-slate-500 font-mono">${formatTime(m.timestamp)}</span>
+            </div>
+            <p class="text-xs text-slate-200 break-words leading-relaxed">${escapeHtml(m.message_text)}</p>
+          </div>
+          ${quickConvertBtn}
+        </div>
+      `;
+    }).join('');
+  } catch (e) {}
+}
+
+function fillBossBroadcast(text) {
+  const inp = document.getElementById('bossBroadcastInput');
+  if (inp) inp.value = text;
+}
+
+async function sendBossBroadcast() {
+  const inp = document.getElementById('bossBroadcastInput');
+  const filterSelect = document.getElementById('bossMsgGroupFilter');
+  if (!inp || !inp.value.trim()) {
+    alert('請輸入要廣播至 LINE 群組的訊息內容');
+    return;
+  }
+  const targetGroup = filterSelect ? filterSelect.value : 'ALL';
+  try {
+    const res = await fetch('/api/boss/broadcast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: inp.value.trim(),
+        target_group_id: targetGroup
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      inp.value = '';
+      showToast(`📢 老闆廣播已同步發送至 ${data.groups_count} 個機場司機與叫車 LINE 群組！`);
+      fetchBossGroupMessages();
+    }
+  } catch (e) {
+    alert('發送廣播失敗');
+  }
+}
+
+async function convertGroupMsgToTrip(groupId, groupName, senderName, msgText) {
+  try {
+    const res = await fetch('/api/simulator/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        group_id: groupId || 'tw-group-driver-fleet',
+        group_name: groupName || '機場司機群',
+        sender_name: senderName || '群組夥伴',
+        message_text: msgText.includes('機場') ? msgText : `${msgText} (前往桃園機場第二航廈)`
+      })
+    });
+    if (res.ok) {
+      showToast('⚡ 已將群組訊息智慧解析並轉為待派車訂單！');
+      loadAllData();
+    }
+  } catch (e) {}
+}
+
+async function renderBossDriverLedger(allTrips) {
+  const container = document.getElementById('bossDriverLedgerList');
+  if (!container) return;
+
+  try {
+    const res = await fetch('/api/drivers?active_only=false');
+    if (res.ok) {
+      cachedAllDriversIncludeInactive = await res.json();
+    }
+  } catch (e) {}
+
+  const driversList = cachedAllDriversIncludeInactive.length > 0 ? cachedAllDriversIncludeInactive : (cachedDrivers || []);
+  const validTrips = (allTrips || []).filter(t => t.status !== 'CANCELLED');
+
+  container.innerHTML = driversList.map(d => {
+    const myTrips = validTrips.filter(t => t.driver_id === d.id);
+    const tripCount = myTrips.length;
+    const feeOwed = tripCount * 50;
+    const totalPayout = myTrips.reduce((s, t) => s + (t.driver_payout || ((t.estimated_fare || 1200) - 50)), 0);
+    const isActive = d.is_active === 1 || d.is_active === true;
+
+    const statusBadge = isActive
+      ? `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">🟢 允許接單</span>`
+      : `<span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold">🔒 已停權冷凍</span>`;
+
+    const toggleBtnLabel = isActive ? '🔒 停權冷凍' : '🟢 恢復權限';
+    const toggleBtnClass = isActive
+      ? 'bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-500/30'
+      : 'bg-emerald-600 hover:bg-emerald-500 text-white';
+
+    return `
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between gap-2 text-xs">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <div class="flex items-center gap-1.5">
+              <strong class="text-white">${escapeHtml(d.name)}</strong>
+              ${statusBadge}
+            </div>
+            <p class="text-[10px] text-slate-400 font-mono mt-0.5">${escapeHtml(d.license_plate)} | ${escapeHtml(d.vehicle_model)}</p>
+          </div>
+          <div class="text-right">
+            <span class="text-[10px] text-amber-300 block">應繳老闆平台費</span>
+            <strong class="text-sm font-mono font-black text-amber-400">NT$ ${feeOwed.toLocaleString()}</strong>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px]">
+          <span class="text-slate-400">承接 <strong class="text-white">${tripCount}</strong> 趟 (實拿 NT$${Math.round(totalPayout).toLocaleString()})</span>
+          <div class="flex items-center gap-1.5">
+            <button type="button" onclick='copyDriverStatement(${JSON.stringify(d.name)}, ${tripCount}, ${feeOwed}, ${Math.round(totalPayout)})' class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 font-bold text-[10px] transition">
+              📋 對帳單
+            </button>
+            <button type="button" onclick="toggleDriverActiveStatus(${d.id})" class="px-2 py-1 rounded ${toggleBtnClass} font-bold text-[10px] transition">
+              ${toggleBtnLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function toggleDriverActiveStatus(driverId) {
+  try {
+    const res = await fetch(`/api/drivers/${driverId}/toggle-active`, { method: 'POST' });
+    if (res.ok) {
+      const updated = await res.json();
+      const msg = updated.is_active ? `🟢 已恢復司機【${updated.name}】之接單權限！` : `🔒 已凍結司機【${updated.name}】之接單權限！`;
+      showToast(msg);
+      loadAllData();
+    }
+  } catch (e) {}
+}
+
+function copyDriverStatement(driverName, tripCount, feeOwed, totalPayout) {
+  const text = `【台北機場專車・司機平台費對帳單】\n👨‍✈️ 司機夥伴：${driverName}\n📊 本期承接趟數：${tripCount} 趟\n💵 司機實收車資合計：NT$ ${totalPayout.toLocaleString()}\n👑 應繳車隊平台費 ($50/趟)：NT$ ${feeOwed.toLocaleString()}\n請核對後匯款予車隊總部，感謝您的辛勞！`;
+  navigator.clipboard.writeText(text).then(() => {
+    showToast(`📋 已複製【${driverName}】之 LINE 對帳單，可直接貼至 LINE 傳送！`);
+  });
+}
+
 
 

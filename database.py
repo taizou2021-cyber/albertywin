@@ -156,10 +156,12 @@ def init_db(force_reseed: bool = False):
             """, seed_drivers)
 
             seed_groups = [
+                ("tw-group-driver-fleet", "【台北機場專車】主力車隊司機搶單大群", now_iso, now_iso, 2, 1),
+                ("tw-group-tpe-terminal-drivers", "【桃機一航/二航】現場排班司機調度群", now_iso, now_iso, 1, 1),
+                ("tw-group-alphard-van-alliance", "【大台北九人座/Alphard】同業外調轉單群", now_iso, now_iso, 1, 1),
                 ("tw-group-taipei-hotels", "台北五星飯店禮賓部送機群", now_iso, now_iso, 1, 1),
                 ("tw-group-xinyi-residence", "信義/大安豪宅住戶專車叫車群", now_iso, now_iso, 1, 1),
-                ("tw-group-taiwan-biz-expat", "台北外商/台商高階機場接送中心", now_iso, now_iso, 0, 1),
-                ("tw-group-driver-fleet", "【台北機場專車】車隊司機即時搶單大群", now_iso, now_iso, 0, 1)
+                ("tw-group-taiwan-biz-expat", "台北外商/台商高階機場接送中心", now_iso, now_iso, 0, 1)
             ]
             cursor.executemany("""
                 INSERT INTO line_groups (group_id, group_name, joined_at, last_message_at, trip_count, is_active)
@@ -201,6 +203,18 @@ def init_db(force_reseed: bool = False):
                     notes, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, seed_trips)
+
+            seed_messages = [
+                ("tw-group-driver-fleet", "陳大明 (老陳)", "driver-01", "各位師傅早！我目前在台北市中山區待命，隨時可接桃機送機單！", 0, now_iso),
+                ("tw-group-tpe-terminal-drivers", "林建宏 (阿宏)", "driver-02", "報告老闆，我剛送完桃機二航，目前在二航入境停車場空車待命，有接機回台北的單可以派給我！", 0, now_iso),
+                ("tw-group-alphard-van-alliance", "黃志強 (強哥)", "driver-03", "Alphard 九人座目前在信義區待命，4~8人或有高爾夫球具的大單隨時可支援！", 0, now_iso),
+                ("tw-group-taipei-hotels", "晶華酒店禮賓部", "user-concierge-01", "明天早上 06:30 需要一輛九人座商務車前往桃園機場第二航廈，4位大人、3件28吋大箱、1個登機箱、1組高爾夫球具，電話 0912-345-678", 1, now_iso),
+                ("tw-group-xinyi-residence", "林董事長秘書", "user-vip-02", "班機 BR88 預計明日 08:30 抵達桃機二航，2人2大箱，請安排專車接機回台北信義區，電話 0933-882-910", 1, now_iso)
+            ]
+            cursor.executemany("""
+                INSERT INTO messages_log (group_id, sender_name, sender_id, message_text, is_booking, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, seed_messages)
 
             conn.commit()
 
@@ -435,6 +449,18 @@ def create_driver(data: Dict[str, Any]) -> int:
         conn.commit()
         return cursor.lastrowid
 
+def toggle_driver_active(driver_id: int) -> Optional[Dict[str, Any]]:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM drivers WHERE id = ?", (driver_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        new_active = 0 if row["is_active"] == 1 else 1
+        cursor.execute("UPDATE drivers SET is_active = ? WHERE id = ?", (new_active, driver_id))
+        conn.commit()
+        return get_driver(driver_id)
+
 def upsert_group(group_id: str, group_name: str) -> Dict[str, Any]:
     with get_db() as conn:
         cursor = conn.cursor()
@@ -471,6 +497,28 @@ def log_message(group_id: str, sender_name: str, sender_id: str, message_text: s
             VALUES (?, ?, ?, ?, ?, ?)
         """, (group_id, sender_name, sender_id, message_text, 1 if is_booking else 0, now))
         conn.commit()
+
+def get_recent_messages(group_id: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        if group_id and group_id != "ALL":
+            cursor.execute("""
+                SELECT m.*, g.group_name
+                FROM messages_log m
+                LEFT JOIN line_groups g ON m.group_id = g.group_id
+                WHERE m.group_id = ?
+                ORDER BY m.id DESC
+                LIMIT ?
+            """, (group_id, limit))
+        else:
+            cursor.execute("""
+                SELECT m.*, g.group_name
+                FROM messages_log m
+                LEFT JOIN line_groups g ON m.group_id = g.group_id
+                ORDER BY m.id DESC
+                LIMIT ?
+            """, (limit,))
+        return [dict(row) for row in cursor.fetchall()]
 
 def get_dashboard_stats() -> Dict[str, Any]:
     with get_db() as conn:
